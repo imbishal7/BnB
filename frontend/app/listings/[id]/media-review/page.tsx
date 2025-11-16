@@ -23,7 +23,7 @@ const data = {
     description: "A water bottle for drinking water",
     status: "media_ready",
     image_urls: [generated_image_1, generated_image_1, generated_image_1],
-    video_url: "/home/aditya/projects/BnB/frontend/app/assets/generated_video.mp4",
+    video_url: "/generated_video.mp4",
 }
 
 export default function MediaReviewPage() {
