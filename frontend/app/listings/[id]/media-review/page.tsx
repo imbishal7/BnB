@@ -1,0 +1,394 @@
+"use client";
+import { useState, useEffect } from "react";
+import { useRouter, useParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { approveMedia, generateMedia } from "@/lib/api";
+import { CheckCircle2, RefreshCw, Image as ImageIcon, Video, ArrowLeft, Loader2, Check } from "lucide-react";
+import generated_image_1 from "@/app/assets/generated_image_1.png"
+import '@/app/assets/hero_background.css';
+import { StaticImageData } from "next/image";
+interface ListingData {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  image_urls?: StaticImageData[];
+  video_url?: string;
+}
+
+const data = {
+    id: "1",
+    title: "Water Bottle",
+    description: "A water bottle for drinking water",
+    status: "media_ready",
+    image_urls: [generated_image_1, generated_image_1, generated_image_1],
+    video_url: "/home/aditya/projects/BnB/frontend/app/assets/generated_video.mp4",
+}
+
+export default function MediaReviewPage() {
+  const router = useRouter();
+  const params = useParams();
+  const listingId = params.id as string;
+
+  const [listing, setListing] = useState<ListingData>(data);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isRegeneratingImages, setIsRegeneratingImages] = useState(false);
+  const [isRegeneratingVideo, setIsRegeneratingVideo] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (listingId) {
+      fetchListing();
+    }
+  }, [listingId]);
+
+  const fetchListing = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load listing"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    try {
+      setIsApproving(true);
+      setError(null);
+      const selectedImageIndices = Array.from(selectedImages);
+      await approveMedia(listingId, selectedImageIndices);
+      router.push(`/listings/${listingId}/publish`);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to approve media"
+      );
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const toggleImageSelection = (index: number) => {
+    setSelectedImages((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (!listing.image_urls) return;
+    const allSelected = listing.image_urls.length === selectedImages.size;
+    if (allSelected) {
+      setSelectedImages(new Set());
+    } else {
+      setSelectedImages(new Set(listing.image_urls.map((_, index) => index)));
+    }
+  };
+
+  const handleRegenerateImages = async () => {
+    try {
+      setIsRegeneratingImages(true);
+      setError(null);
+      await generateMedia(listingId, 'images');
+      // Clear selections when regenerating
+      setSelectedImages(new Set());
+      // Refetch listing to get new media
+      await fetchListing();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to regenerate images"
+      );
+    } finally {
+      setIsRegeneratingImages(false);
+    }
+  };
+
+  const handleRegenerateVideo = async () => {
+    try {
+      setIsRegeneratingVideo(true);
+      setError(null);
+      await generateMedia(listingId, 'video');
+      // Refetch listing to get new media
+      await fetchListing();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to regenerate video"
+      );
+    } finally {
+      setIsRegeneratingVideo(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="relative min-h-screen bg-background">
+        <div className="hero-background min-h-screen absolute top-0 left-0 w-full h-full opacity-30"></div>
+        <div className="container mx-auto max-w-6xl py-12 px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-muted-foreground">Loading media...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !listing) {
+    return (
+      <div className="relative min-h-screen bg-background">
+        <div className="hero-background min-h-screen absolute top-0 left-0 w-full h-full opacity-30"></div>
+        <div className="container mx-auto max-w-6xl py-12 px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Error:</span>
+              <span>{error}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!listing) {
+    return null;
+  }
+
+  const hasImages = listing.image_urls && listing.image_urls.length > 0;
+  const hasVideo = listing.video_url;
+
+  return (
+    <div className="relative min-h-screen bg-background">
+      <div className="hero-background min-h-screen absolute top-0 left-0 w-full h-full opacity-30"></div>
+      <div className="container mx-auto max-w-6xl py-12 px-4 sm:px-6 lg:px-8 relative z-10">
+        {/* Header Section */}
+        <div className="mb-8 space-y-4">
+          <div className="flex items-center gap-3 mx-auto">
+            <h1 className="text-4xl font-bold">Review Media</h1>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mb-6 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Error:</span>
+              <span>{error}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Media Display Section */}
+        <div className="space-y-6">
+          {/* Images Section */}
+          {hasImages && (
+            <Card className="rounded-xl border bg-card shadow-sm transition-shadow hover:shadow-md">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <ImageIcon className="h-5 w-5 text-primary" />
+                      Generated Images
+                    </CardTitle>
+                    <CardDescription>
+                      Review the Generated Images for your listing
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {hasImages && listing.image_urls!.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSelectAll}
+                        disabled={isRegeneratingImages || isRegeneratingVideo || isApproving}
+                        className="h-9"
+                      >
+                        {selectedImages.size === listing.image_urls!.length ? "Deselect All" : "Select All"}
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRegenerateImages}
+                      disabled={isRegeneratingImages || isRegeneratingVideo || isApproving}
+                      className="h-9"
+                    >
+                      {isRegeneratingImages ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Regenerating...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Regenerate Images
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {listing.image_urls!.map((url, index) => {
+                    const isSelected = selectedImages.has(index);
+                    return (
+                      <div
+                        key={index}
+                        className="relative aspect-square rounded-lg overflow-hidden border bg-muted group cursor-pointer"
+                        onClick={(e) => {
+                          // If clicking on the checkbox button, don't do anything (handled by button's onClick)
+                          const target = e.target as HTMLElement;
+                          if (target.closest('.checkbox-area') || target.closest('button')) {
+                            return;
+                          }
+                          // Otherwise, open image in new tab
+                          window.open(url.src as string, "_blank");
+                        }}
+                      >
+                        <img
+                          src={url.src}
+                          alt={`Generated image ${index + 1}`}
+                          className="w-full h-full object-contain transition-transform group-hover:scale-105"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Crect fill='%23ddd' width='400' height='400'/%3E%3Ctext fill='%23999' font-family='sans-serif' font-size='18' x='50%25' y='50%25' text-anchor='middle' dy='.3em'%3EFailed to load image%3C/text%3E%3C/svg%3E";
+                          }}
+                        />
+                        {/* Checkbox overlay */}
+                        <button
+                          className={`checkbox-area absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                            isSelected
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-background/80 backdrop-blur-sm border-2 border-border hover:bg-accent"
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleImageSelection(index);
+                          }}
+                          aria-label={`${isSelected ? "Deselect" : "Select"} image ${index + 1}`}
+                        >
+                          {isSelected && <Check className="h-5 w-5" />}
+                        </button>
+                        {/* Selection overlay */}
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-primary/10 border-2 border-primary rounded-lg pointer-events-none" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Video Section */}
+          {hasVideo && (
+            <Card className="rounded-xl border bg-card shadow-sm transition-shadow hover:shadow-md">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Video className="h-5 w-5 text-primary" />
+                      Generated Video
+                    </CardTitle>
+                    <CardDescription>
+                      Review the Generated Video for your listing
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRegenerateVideo}
+                    disabled={isRegeneratingVideo || isRegeneratingImages || isApproving}
+                    className="h-9"
+                  >
+                    {isRegeneratingVideo ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Regenerating...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Regenerate Video
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="relative aspect-video rounded-lg overflow-hidden border bg-muted">
+                  <video                    
+                    className="w-full h-full"
+                    controls preload="auto"
+                  >
+                    <source src="/generated_video.mp4" type="video/mp4" />
+                    Your browser does not support the video tag.
+                  </video>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* No Media Message */}
+          {!hasImages && !hasVideo && (
+            <Card className="rounded-xl border bg-card shadow-sm">
+              <CardContent className="py-12">
+                <div className="flex flex-col items-center justify-center text-center space-y-4">
+                  <ImageIcon className="h-12 w-12 text-muted-foreground" />
+                  <div>
+                    <h3 className="text-lg font-semibold">No Media Generated Yet</h3>
+                    <p className="text-muted-foreground mt-2">
+                      Media generation may still be in progress. Click regenerate to try again.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex flex-col gap-2 justify-center items-center pt-4">
+            <Button
+              onClick={handleApprove}
+              disabled={isApproving || isRegeneratingImages || isRegeneratingVideo || (hasImages && selectedImages.size === 0) || (!hasImages && !hasVideo)}
+              className="h-11 text-base font-medium px-8"
+            >
+              {isApproving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Approving...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Approve & Continue
+                  
+                </>
+
+              )}
+            </Button>
+            {hasImages && selectedImages.size === 0 && (
+                    <span className="text-sm text-muted-foreground">
+                      Please select at least one image to approve
+                    </span>
+                  )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+

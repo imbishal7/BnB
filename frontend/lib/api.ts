@@ -18,6 +18,8 @@ export interface ListingResponse {
   title: string;
   description: string;
   status: string;
+  image_urls?: string[];
+  video_url?: string;
   [key: string]: unknown;
 }
 
@@ -57,6 +59,26 @@ export async function createListing(data: CreateListingRequest): Promise<Listing
   return apiRequest<ListingResponse>('/listings', {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+export async function getListing(id: string): Promise<ListingResponse> {
+  return apiRequest<ListingResponse>(`/listings/${id}`);
+}
+
+export async function approveMedia(id: string, selectedImageIndices?: number[]): Promise<ListingResponse> {
+  const body = selectedImageIndices ? { selected_image_indices: selectedImageIndices } : {};
+  return apiRequest<ListingResponse>(`/listings/${id}/approve-media`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function generateMedia(id: string, mediaType?: 'images' | 'video'): Promise<ListingResponse> {
+  const body = mediaType ? { media_type: mediaType } : {};
+  return apiRequest<ListingResponse>(`/listings/${id}/generate-media`, {
+    method: 'POST',
+    body: JSON.stringify(body),
   });
 }
 
