@@ -1,0 +1,563 @@
+{
+  "name": "UGC Ads - Webhook API (Test Mode)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ugc-generate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1280,
+        -336
+      ],
+      "id": "a4150008-d70d-4c23-b6eb-eac2a535d7fe",
+      "name": "Webhook",
+      "webhookId": "ugc-generate-webhook"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Product: {{ $json.Product }}\n\nImage Setting: {{ $json['Video Setting'] }}",
+        "options": {
+          "systemMessage": "You are an expert in hyper-realistic user-generated content (UGC) photography. Your task is to write a descriptive image prompt to create a highly authentic selfie-style photo featuring a human influencer holding a beverage.\n\nYou will be provided with a product photo. Your job is to generate a written prompt that describes a scene where a person is holding a product that visually resembles the reference in color, shape, and style, without using trademarked brand names.\n\nPrompt Guidelines:\n\n1. Human Realism - Describe a realistic, diverse human with lifelike skin texture and tone, slight asymmetries, natural facial features, and visible hand details (fingernails, subtle lines, and a genuine grip).\n\n2. Product Aesthetics - Describe the visual attributes of the product based on the reference photo. Focus on the container shape, material (e.g., aluminum can, glass bottle), color palette, and design style (e.g., vintage, minimalist, vibrant). Do not use specific real-world brand names. Focus on the visual \"vibe\" so it blends naturally.\n\n3. Composition - Specify a selfie-style composition where the human holds the beverage prominently in the foreground, slightly angled toward the camera. The person's face is visible, smiling or candid. The subject makes natural eye contact with the viewer.\n\n4. Lighting - Use natural, high-quality lighting (e.g., daylight or golden hour). Include authentic indoor or outdoor settings based on the given scene.\n\n5. Authentic Details - Add subtle imperfections that make it look like real user-generated content: stray hairs, casual attire, and natural posture. Everyday realism and spontaneity, not a posed studio shot.\n\n6. Technical Style - Avoid visible phones, selfie sticks, or camera reflections. Maintain sharp focus on the human. Mention a shallow depth of field for a cinematic, relatable look.\n\nReturn only the image prompt, nothing else."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -944,
+        -416
+      ],
+      "id": "c0e8e59b-6496-4359-8cfe-65c1a4f231d5",
+      "name": "Veo Image Prompt"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -336,
+        -320
+      ],
+      "id": "b3e30f3c-60f2-46bd-88e8-eae58abf57f0",
+      "name": "Wait for Image",
+      "webhookId": "wait-image-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "check-image-success",
+              "leftValue": "={{ $json.data.state }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        16,
+        -352
+      ],
+      "id": "047bc31a-1c46-4a99-88ba-766988d83aca",
+      "name": "If Image Ready"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "chatgpt-4o-latest",
+          "mode": "list",
+          "cachedResultName": "CHATGPT-4O-LATEST"
+        },
+        "text": "Describe what is in the image. Describe the environment and the human who is the focus of the image, as well as what the human is holding.",
+        "imageUrls": "={{ JSON.parse($json.data.resultJson).resultUrls[0] }}\n",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        224,
+        -368
+      ],
+      "id": "db17adf2-13b0-4480-8a05-9220e8bbd3f1",
+      "name": "Analyze Image",
+      "credentials": {
+        "openAiApi": {
+          "id": "GB0PlhpF5l9rFZDw",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Product: {{ $('Webhook').item.json.Product }}\n\nProduct ICP: {{ $('Webhook').item.json.ICP }}\n\nProduct Features: {{ $('Webhook').item.json['Product Features'] }}\n\nVideo Setting: {{ $('Webhook').item.json['Video Setting'] }}\n\nReference Image Description: {{ $json.content }}",
+        "options": {
+          "systemMessage": "You are an expert UGC video creator. Your task is to generate a prompt for an AI video model (such as Veo 3.1) based on the provided product, ideal customer profile (ICP), product features, video setting, and reference image. Your goal is to create a realistic, selfie-style video that appears to be filmed by an influencer using one hand to hold the phone and the other to hold or interact with the product. The video should feel authentic, spontaneous, and natural, while maintaining visual and style consistency with the provided reference image. The phone itself must never appear in the shot.\n\nRequirements:\n\n### Subject & Framing\n- The subject is the ideal user (from the ICP), holding or using the product.\n- The video is recorded selfie-style with the camera held at arm's length in one hand and the product in the other.\n- The subject looks directly into the lens while speaking.\n- The video is in vertical (9:16) orientation, suitable for TikTok or Instagram Reels.\n\n### Visual Style\n- Use natural lighting and casual, realistic backgrounds (e.g., bedroom, gym, kitchen, car, office).\n- Include slight camera shake, soft grain, and subtle imperfections for realism.\n- The product, user's face, and interaction must remain clearly visible.\n- Ensure no phone, camera, overlays, subtitles, or logos appear in the frame.\n- The appearance, colors, and style should closely match the provided reference image (do not include or link the image in the output).\n\n### Tone & Dialogue\n- The subject speaks 1-2 casual, unscripted sentences about what they personally love about the product.\n- The dialogue should sound personal, conversational, and genuine.\n- The delivery feels spontaneous and relatable, not like a polished ad.\n\n### Technical Specs\n- Duration: 8 seconds\n- Shot Type: Handheld, selfie-style\n- Lighting: Natural and realistic\n- Reference Image: Used only for style and consistency matching (not shown or mentioned)\n\nReturn only the video prompt, nothing else."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        384,
+        -576
+      ],
+      "id": "185a00c0-29ed-4567-9c57-d50475100fd4",
+      "name": "Veo Video Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.kie.ai/api/v1/veo/generate",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prompt\": \"{{ $json.output.replace(/\\r?\\n|\\r/g, ' ').replace(/\"/g, '').replace(/['']/g, '') }}\",\n  \"imageUrls\": [\"{{ JSON.parse($('Get Nano Image').item.json.data.resultJson).resultUrls[0] }}\"],\n  \"model\": \"veo3_fast\",\n  \"aspectRatio\": \"9:16\",\n  \"enableTranslation\": true\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        736,
+        -656
+      ],
+      "id": "53d3860d-e4af-4814-a688-3493694fe588",
+      "name": "Veo Video",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3bisG3rPhYysPLUa",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        928,
+        -656
+      ],
+      "id": "d290b2f4-e019-4381-84c2-65390ec7a1c9",
+      "name": "Wait for Video",
+      "webhookId": "wait-video-webhook"
+    },
+    {
+      "parameters": {
+        "url": "https://api.kie.ai/api/v1/veo/record-info",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "taskId",
+              "value": "={{ $json.data.taskId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1136,
+        -656
+      ],
+      "id": "a97c63fc-4963-42da-869b-4f06670d1358",
+      "name": "Get Veo Video",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3bisG3rPhYysPLUa",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "check-video-success",
+              "leftValue": "={{ $json.data.response }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "object",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1328,
+        -656
+      ],
+      "id": "b5f58cef-5661-4074-b029-c53ea1ff64c8",
+      "name": "If Video Ready"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"status\": \"success\",\n  \"product\": $('Webhook').item.json.Product,\n  \"model\": \"Nano + Veo 3.1\",\n  \"assets\": {\n    \"image_url\": JSON.parse($('Get Nano Image').item.json.data.resultJson).resultUrls[0],\n    \"video_url\": $('Get Veo Video').item.json.data.response.resultUrls[0]\n  },\n  \"prompts\": {\n    \"image_prompt\": $('Veo Image Prompt').item.json.output,\n    \"video_prompt\": $('Veo Video Prompt').item.json.output\n  }\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1648,
+        -512
+      ],
+      "id": "100231f7-811b-4f90-aac3-5c8fe5e6453c",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        -864
+      ],
+      "id": "a06e7fe9-0946-42b2-8d96-adc44346d21e",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "9IFcaLM73QzeDhXy",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.kie.ai/api/v1/jobs/createTask",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"google/nano-banana-edit\",\n  \"input\": {\n    \"prompt\": \"{{ $json.output.replace(/\\r?\\n|\\r/g, ' ') }}\",\n    \"image_urls\": \"{{ $('Webhook').item.json.body['Product Photo'] }}\",\n    \"output_format\": \"png\",\n    \"image_size\": \"9:16\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -560,
+        -320
+      ],
+      "id": "b44dfe79-825a-4d95-a3e5-69e7125194fe",
+      "name": "Nano Image",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "DmNssCtD5qalGuys",
+          "name": "Header Auth account 3"
+        },
+        "httpBearerAuth": {
+          "id": "JHsXBp9Rp5opDEXQ",
+          "name": "Bearer Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.kie.ai/api/v1/jobs/recordInfo",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "taskId",
+              "value": "={{ $json.data.taskId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -160,
+        -320
+      ],
+      "id": "9ecb4268-a794-4219-b3bc-e55cc14a6367",
+      "name": "Get Nano Image",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "DmNssCtD5qalGuys",
+          "name": "Header Auth account 3"
+        },
+        "httpBearerAuth": {
+          "id": "JHsXBp9Rp5opDEXQ",
+          "name": "Bearer Auth account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "kiran1xy.app.n8n.cloud",
+            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+            "content-length": "353",
+            "accept": "*/*",
+            "accept-encoding": "gzip, br",
+            "accept-language": "en-US,en;q=0.6",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "2601:3c3:401:3a20:ac65:8f4e:b9b5:fcc7",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "US",
+            "cf-ray": "99f163f5378db48a-MEM",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "content-type": "application/json",
+            "origin": "http://localhost:5500",
+            "priority": "u=1, i",
+            "referer": "http://localhost:5500/",
+            "sec-ch-ua": "\"Chromium\";v=\"142\", \"Brave\";v=\"142\", \"Not_A Brand\";v=\"99\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cross-site",
+            "sec-gpc": "1",
+            "x-forwarded-for": "2601:3c3:401:3a20:ac65:8f4e:b9b5:fcc7, 172.69.196.143",
+            "x-forwarded-host": "kiran1xy.app.n8n.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-38-6f9f659dd9-865tl",
+            "x-is-trusted": "yes",
+            "x-real-ip": "2601:3c3:401:3a20:ac65:8f4e:b9b5:fcc7"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "Product": "Water Bottle",
+            "Product Photo": "https://encrypted-tbn1.gstatic.com/shopping?q=tbn:ANd9GcTB1m1fiDhQiJwHHHbK329Px97ifKfrqPtPSkMSYPGzUCk5nusLmlpnu_RkyLRJtirGnX5boDyUCPL6vI2DqFxtsZXWAoDdOP22KuV2XsGBYgtJAuaXHpdTDA",
+            "ICP": "Young male ",
+            "Product Features": "Keep drink cold in summer and warm in winter",
+            "Video Setting": "A cyclist with water bottle"
+          },
+          "webhookUrl": "https://kiran1xy.app.n8n.cloud/webhook-test/ugc-generate",
+          "executionMode": "test"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Veo Image Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Veo Image Prompt": {
+      "main": [
+        [
+          {
+            "node": "Nano Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Image": {
+      "main": [
+        [
+          {
+            "node": "Get Nano Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Image Ready": {
+      "main": [
+        [
+          {
+            "node": "Analyze Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait for Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Image": {
+      "main": [
+        [
+          {
+            "node": "Veo Video Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Veo Video Prompt": {
+      "main": [
+        [
+          {
+            "node": "Veo Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Veo Video": {
+      "main": [
+        [
+          {
+            "node": "Wait for Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Video": {
+      "main": [
+        [
+          {
+            "node": "Get Veo Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Veo Video": {
+      "main": [
+        [
+          {
+            "node": "If Video Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Video Ready": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait for Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Veo Image Prompt",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Veo Video Prompt",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nano Image": {
+      "main": [
+        [
+          {
+            "node": "Wait for Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Nano Image": {
+      "main": [
+        [
+          {
+            "node": "If Image Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "c3cd18a2-867e-4595-b11e-1dea7edf0df7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "83b3410406169c8f3bd0bda19d6db6955e950e51d6dca8d804e1e1975e46033d"
+  },
+  "id": "yMDoxuNUeYNpQl6s",
+  "tags": []
+}

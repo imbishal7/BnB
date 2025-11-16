@@ -1,36 +1,109 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BnB Frontend
+
+Next.js frontend for the Brand in Box (BnB) marketplace listing platform.
+
+## Features
+
+- User authentication (register/login with JWT)
+- Listing management dashboard
+- Create listings with UGC media generation settings
+- AI-powered image and video generation via n8n workflow
+- Media review and approval
+- One-click eBay publishing
+- Real-time status updates with polling
+
+## Tech Stack
+
+- **Next.js 16** - React framework with App Router
+- **React 19** - UI library
+- **TypeScript** - Type safety
+- **Tailwind CSS 4** - Styling
+- **Fetch API** - HTTP requests to backend
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+ or Bun
+- Backend API running at `http://localhost:8000`
+
+### Installation
+
+```bash
+cd frontend
+npm install
+# or
+bun install
+```
+
+### Environment Variables
+
+Create a `.env.local` file:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+### Development
 
 ```bash
 npm run dev
 # or
-yarn dev
-# or
-pnpm dev
-# or
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+frontend/
+├── app/                      # Next.js App Router
+│   ├── page.tsx             # Landing page
+│   ├── login/               # Login page
+│   ├── register/            # Registration page
+│   ├── dashboard/           # Dashboard with listings
+│   └── listings/
+│       ├── new/             # Create listing form
+│       └── [id]/
+│           ├── page.tsx     # Listing detail/publish
+│           └── media-review/ # Media review/approval
+├── lib/
+│   ├── api.ts               # API client
+│   └── types.ts             # TypeScript types
+└── .env.local               # Environment variables
+```
 
-## Learn More
+## User Flow
 
-To learn more about Next.js, take a look at the following resources:
+1. **Register/Login** → Get JWT token stored in localStorage
+2. **Dashboard** → View all listings with status badges
+3. **Create Listing** → Fill form with product info + UGC settings
+4. **Generate Media** → Trigger n8n workflow for AI media generation
+5. **Review Media** → View generated images/videos, approve or regenerate
+6. **Publish** → One-click publish to eBay
+7. **View Published** → See eBay ItemID and URL
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## API Integration
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The frontend connects to the FastAPI backend through `lib/api.ts`:
 
-## Deploy on Vercel
+### Auth Endpoints
+- `POST /auth/register`
+- `POST /auth/login`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Listing Endpoints
+- `POST /listings` - Create listing
+- `GET /listings` - Get all listings
+- `GET /listings/{id}` - Get specific listing
+- `PATCH /listings/{id}` - Update listing
+- `POST /listings/{id}/generate-media` - Trigger n8n media generation
+- `POST /listings/{id}/approve-media` - Approve media
+- `POST /listings/{id}/publish` - Publish to eBay
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Build & Deploy
+
+```bash
+npm run build
+npm start
+```
