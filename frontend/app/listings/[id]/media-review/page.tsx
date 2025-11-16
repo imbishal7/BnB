@@ -4,7 +4,7 @@ import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { approveMedia, generateMedia } from "@/lib/api";
-import { CheckCircle2, RefreshCw, Image as ImageIcon, Video, ArrowLeft, Loader2, Check } from "lucide-react";
+import { CheckCircle2, RefreshCw, Image as ImageIcon, Video, ArrowLeft, Loader2, Check, Download } from "lucide-react";
 import generated_image_1 from "@/app/assets/generated_image_1.png"
 import '@/app/assets/hero_background.css';
 import { StaticImageData } from "next/image";
@@ -130,6 +130,53 @@ export default function MediaReviewPage() {
     }
   };
 
+  const handleDownloadImage = async (imageUrl: string | StaticImageData, index: number) => {
+    try {
+      const url = typeof imageUrl === 'string' ? imageUrl : imageUrl.src;
+      // Handle both absolute URLs and relative paths
+      const fetchUrl = url.startsWith('http') || url.startsWith('//') ? url : url.startsWith('/') ? url : `/${url}`;
+      const response = await fetch(fetchUrl);
+      if (!response.ok) throw new Error('Failed to fetch image');
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      const extension = blob.type.split('/')[1] || url.split('.').pop() || 'png';
+      link.download = `listing-image-${index + 1}.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to download image"
+      );
+    }
+  };
+
+  const handleDownloadVideo = async (videoUrl: string) => {
+    try {
+      // Handle both absolute URLs and relative paths
+      const fetchUrl = videoUrl.startsWith('http') || videoUrl.startsWith('//') ? videoUrl : videoUrl.startsWith('/') ? videoUrl : `/${videoUrl}`;
+      const response = await fetch(fetchUrl);
+      if (!response.ok) throw new Error('Failed to fetch video');
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      const extension = blob.type.split('/')[1] || videoUrl.split('.').pop() || 'mp4';
+      link.download = `listing-video.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to download video"
+      );
+    }
+  };
+
   if (loading) {
     return (
       <div className="relative min-h-screen bg-background">
@@ -195,13 +242,13 @@ export default function MediaReviewPage() {
           {hasImages && (
             <Card className="rounded-xl border bg-card shadow-sm transition-shadow hover:shadow-md">
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex md:flex-row flex-col gap-4 items-center justify-between">
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <ImageIcon className="h-5 w-5 text-primary" />
                       Generated Images
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="mt-2">
                       Review the Generated Images for your listing
                     </CardDescription>
                   </div>
@@ -281,6 +328,17 @@ export default function MediaReviewPage() {
                         >
                           {isSelected && <Check className="h-5 w-5" />}
                         </button>
+                        {/* Download button */}
+                        <button
+                          className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-background/80 backdrop-blur-sm border-2 border-border hover:bg-accent flex items-center justify-center transition-all"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownloadImage(url, index);
+                          }}
+                          aria-label={`Download image ${index + 1}`}
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
                         {/* Selection overlay */}
                         {isSelected && (
                           <div className="absolute inset-0 bg-primary/10 border-2 border-primary rounded-lg pointer-events-none" />
@@ -297,7 +355,7 @@ export default function MediaReviewPage() {
           {hasVideo && (
             <Card className="rounded-xl border bg-card shadow-sm transition-shadow hover:shadow-md">
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex md:flex-row flex-col gap-4 items-center justify-between">
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <Video className="h-5 w-5 text-primary" />
@@ -329,14 +387,25 @@ export default function MediaReviewPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="relative aspect-video rounded-lg overflow-hidden border bg-muted">
+                <div className="relative aspect-video rounded-lg overflow-hidden border bg-muted group">
                   <video                    
                     className="w-full h-full"
                     controls preload="auto"
                   >
-                    <source src="/generated_video.mp4" type="video/mp4" />
+                    <source src={listing.video_url} type="video/mp4" />
                     Your browser does not support the video tag.
                   </video>
+                  {/* Download button */}
+                  <button
+                    className="absolute top-2 right-2 w-10 h-10 rounded-full bg-background/80 backdrop-blur-sm border-2 border-border hover:bg-accent flex items-center justify-center transition-all z-10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadVideo(listing.video_url!);
+                    }}
+                    aria-label="Download video"
+                  >
+                    <Download className="h-5 w-5" />
+                  </button>
                 </div>
               </CardContent>
             </Card>
