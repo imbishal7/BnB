@@ -14,7 +14,7 @@ class N8nClient:
     
     async def trigger_media_generation(
         self,
-        listing_id: int,
+        listing_id: str,
         product_name: str,
         product_photo_url: str,
         target_audience: str,
@@ -56,7 +56,7 @@ class N8nClient:
     
     async def trigger_ebay_publish(
         self,
-        listing_id: int,
+        listing_id: str,
         title: str,
         description: str,
         category_id: Optional[str],

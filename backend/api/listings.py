@@ -28,6 +28,7 @@ def create_listing(
         quantity=listing_data.quantity,
         condition_id=listing_data.condition_id,
         product_photo_url=listing_data.product_photo_url,
+        uploaded_image_urls=listing_data.uploaded_image_urls,
         target_audience=listing_data.target_audience,
         product_features=listing_data.product_features,
         video_setting=listing_data.video_setting,
@@ -53,7 +54,7 @@ def get_listings(
 
 @router.get("/{listing_id}", response_model=ListingResponse)
 def get_listing(
-    listing_id: int,
+    listing_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -74,7 +75,7 @@ def get_listing(
 
 @router.patch("/{listing_id}", response_model=ListingResponse)
 def update_listing(
-    listing_id: int,
+    listing_id: str,
     listing_data: ListingUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -104,7 +105,7 @@ def update_listing(
 
 @router.delete("/{listing_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_listing(
-    listing_id: int,
+    listing_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -127,7 +128,7 @@ def delete_listing(
 
 @router.post("/{listing_id}/generate-media", response_model=ListingResponse)
 async def generate_media(
-    listing_id: int,
+    listing_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -178,7 +179,7 @@ async def generate_media(
 
 @router.post("/{listing_id}/approve-media", response_model=ListingResponse)
 def approve_media(
-    listing_id: int,
+    listing_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -210,7 +211,7 @@ def approve_media(
 
 @router.post("/{listing_id}/publish", response_model=ListingResponse)
 async def publish_listing(
-    listing_id: int,
+    listing_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

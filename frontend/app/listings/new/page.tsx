@@ -13,8 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createListing } from "@/lib/api";
-import { Sparkles, Package, DollarSign, Image, Video } from "lucide-react";
+import { createListing, uploadImages } from "@/lib/api";
+import { Sparkles, Package, DollarSign, Image, Video, Upload, X, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import '@/app/assets/hero_background.css'
 
@@ -78,6 +78,9 @@ export default function NewListingPage() {
   const [error, setError] = useState<string | null>(null);
   const [enableImageGeneration, setEnableImageGeneration] = useState(false);
   const [enableVideoGeneration, setEnableVideoGeneration] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState<File[]>([]);
+  const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -86,8 +89,10 @@ export default function NewListingPage() {
     price: "",
     quantity: "",
     condition: "",
-    image_prompt: "",
-    video_prompt: "",
+    product_photo_url: "",
+    target_audience: "",
+    product_features: "",
+    video_setting: "",
   });
 
   const handleChange = (
@@ -106,14 +111,63 @@ export default function NewListingPage() {
   const handleImageToggle = (checked: boolean) => {
     setEnableImageGeneration(checked);
     if (!checked) {
-      setFormData((prev) => ({ ...prev, image_prompt: "" }));
+      setFormData((prev) => ({ ...prev, product_photo_url: "", target_audience: "", product_features: "" }));
     }
   };
 
   const handleVideoToggle = (checked: boolean) => {
     setEnableVideoGeneration(checked);
     if (!checked) {
-      setFormData((prev) => ({ ...prev, video_prompt: "" }));
+      setFormData((prev) => ({ ...prev, video_setting: "" }));
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileArray = Array.from(files);
+    
+    // Validate file types
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    const invalidFiles = fileArray.filter(file => !validTypes.includes(file.type));
+    
+    if (invalidFiles.length > 0) {
+      setError('Please upload only image files (JPEG, PNG, WebP, GIF)');
+      return;
+    }
+
+    // Validate file sizes (max 10MB each)
+    const maxSize = 10 * 1024 * 1024;
+    const oversizedFiles = fileArray.filter(file => file.size > maxSize);
+    
+    if (oversizedFiles.length > 0) {
+      setError('Each image must be less than 10MB');
+      return;
+    }
+
+    // Add to uploaded images list
+    setUploadedImages(prev => [...prev, ...fileArray]);
+    setError(null);
+  };
+
+  const removeUploadedImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+    setUploadedImageUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadImagesToCloud = async () => {
+    if (uploadedImages.length === 0) return [];
+
+    try {
+      setIsUploading(true);
+      const response = await uploadImages(uploadedImages);
+      setUploadedImageUrls(response.urls);
+      return response.urls;
+    } catch (err) {
+      throw new Error(err instanceof Error ? err.message : 'Failed to upload images');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -142,12 +196,12 @@ export default function NewListingPage() {
       setError("Condition is required");
       return false;
     }
-    if (enableImageGeneration && !formData.image_prompt.trim()) {
-      setError("Image prompt is required when image generation is enabled");
+    if (enableImageGeneration && !formData.product_photo_url.trim()) {
+      setError("Product photo URL is required when image generation is enabled");
       return false;
     }
-    if (enableVideoGeneration && !formData.video_prompt.trim()) {
-      setError("Video prompt is required when video generation is enabled");
+    if (enableVideoGeneration && !formData.video_setting.trim()) {
+      setError("Video setting is required when video generation is enabled");
       return false;
     }
     return true;
@@ -164,6 +218,12 @@ export default function NewListingPage() {
     setIsSubmitting(true);
 
     try {
+      // Upload images to GCS first if any
+      let imageUrls: string[] = [];
+      if (uploadedImages.length > 0) {
+        imageUrls = await uploadImagesToCloud();
+      }
+
       const listingData: {
         title: string;
         description: string;
@@ -171,8 +231,11 @@ export default function NewListingPage() {
         price: number;
         quantity: number;
         condition_id: string;
-        image_prompt?: string;
-        video_prompt?: string;
+        uploaded_image_urls?: string[];
+        product_photo_url?: string;
+        target_audience?: string;
+        product_features?: string;
+        video_setting?: string;
       } = {
         title: formData.title.trim(),
         description: formData.description.trim(),
@@ -182,12 +245,19 @@ export default function NewListingPage() {
         condition_id: formData.condition,
       };
 
+      // Add uploaded image URLs
+      if (imageUrls.length > 0) {
+        listingData.uploaded_image_urls = imageUrls;
+      }
+
       if (enableImageGeneration) {
-        listingData.image_prompt = formData.image_prompt.trim();
+        listingData.product_photo_url = formData.product_photo_url.trim();
+        listingData.target_audience = formData.target_audience.trim();
+        listingData.product_features = formData.product_features.trim();
       }
 
       if (enableVideoGeneration) {
-        listingData.video_prompt = formData.video_prompt.trim();
+        listingData.video_setting = formData.video_setting.trim();
       }
 
       const response = await createListing(listingData);
@@ -384,6 +454,89 @@ export default function NewListingPage() {
             </div>
           </div>
 
+          {/* Product Images Upload Section */}
+          <div className="rounded-xl border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
+            <div className="mb-6 space-y-1">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <Image className="h-5 w-5 text-primary" />
+                Product Images
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Upload actual photos of your product (optional but recommended)
+              </p>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="border-2 border-dashed border-border rounded-lg p-6 hover:border-primary/50 transition-colors">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                    <Upload className="h-6 w-6 text-primary" />
+                  </div>
+                  <div className="text-center">
+                    <Label htmlFor="image-upload" className="cursor-pointer">
+                      <span className="text-primary hover:underline font-medium">
+                        Click to upload
+                      </span>
+                      <span className="text-muted-foreground"> or drag and drop</span>
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      PNG, JPG, WebP or GIF (max 10MB each)
+                    </p>
+                  </div>
+                  <Input
+                    id="image-upload"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    disabled={isUploading || isSubmitting}
+                  />
+                </div>
+              </div>
+
+              {/* Preview uploaded images */}
+              {uploadedImages.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    Uploaded Images ({uploadedImages.length})
+                  </Label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {uploadedImages.map((file, index) => (
+                      <div key={index} className="relative group">
+                        <div className="aspect-square rounded-lg border overflow-hidden">
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={`Upload ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeUploadedImage(index)}
+                          className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                          disabled={isUploading || isSubmitting}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1 truncate">
+                          {file.name}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {isUploading && (
+                <div className="flex items-center justify-center gap-2 text-primary">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Uploading images to cloud storage...</span>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Media Generation Prompts Section */}
           <div className="rounded-xl border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
             <div className="mb-6 space-y-1">
@@ -409,20 +562,47 @@ export default function NewListingPage() {
                   />
                 </div>
                 {enableImageGeneration && (
-                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <Label htmlFor="image_prompt" className="text-sm font-medium">
-                      Image Prompt *
-                    </Label>
-                    <Textarea
-                      id="image_prompt"
-                      name="image_prompt"
-                      value={formData.image_prompt}
-                      onChange={handleChange}
-                      placeholder="Describe how you want the image to look like"
-                      rows={4}
-                      className="resize-none"
-                      required
-                    />
+                  <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="space-y-2">
+                      <Label htmlFor="product_photo_url" className="text-sm font-medium">
+                        Product Photo URL *
+                      </Label>
+                      <Input
+                        id="product_photo_url"
+                        name="product_photo_url"
+                        type="url"
+                        value={formData.product_photo_url}
+                        onChange={handleChange}
+                        placeholder="https://example.com/product-image.jpg"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="target_audience" className="text-sm font-medium">
+                        Target Audience (ICP)
+                      </Label>
+                      <Input
+                        id="target_audience"
+                        name="target_audience"
+                        value={formData.target_audience}
+                        onChange={handleChange}
+                        placeholder="e.g., Young male athlete"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="product_features" className="text-sm font-medium">
+                        Product Features
+                      </Label>
+                      <Textarea
+                        id="product_features"
+                        name="product_features"
+                        value={formData.product_features}
+                        onChange={handleChange}
+                        placeholder="e.g., Keeps drinks cold for 24 hours"
+                        rows={3}
+                        className="resize-none"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -444,15 +624,15 @@ export default function NewListingPage() {
                 </div>
                 {enableVideoGeneration && (
                   <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <Label htmlFor="video_prompt" className="text-sm font-medium">
-                      Video Prompt *
+                    <Label htmlFor="video_setting" className="text-sm font-medium">
+                      Video Setting *
                     </Label>
                     <Textarea
-                      id="video_prompt"
-                      name="video_prompt"
-                      value={formData.video_prompt}
+                      id="video_setting"
+                      name="video_setting"
+                      value={formData.video_setting}
                       onChange={handleChange}
-                      placeholder="Describe the story video "
+                      placeholder="e.g., A cyclist with water bottle in outdoor setting"
                       rows={4}
                       className="resize-none"
                       required

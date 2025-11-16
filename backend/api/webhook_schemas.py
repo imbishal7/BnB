@@ -4,7 +4,7 @@ from typing import Optional, List
 
 class MediaCompleteWebhook(BaseModel):
     """Schema for media generation completion webhook from n8n UGC workflow."""
-    listing_id: Optional[int] = None
+    listing_id: Optional[str] = None
     status: str
     product: Optional[str] = None
     model: Optional[str] = None
@@ -27,7 +27,7 @@ class MediaCompleteWebhook(BaseModel):
 
 class EbayPublishWebhook(BaseModel):
     """Schema for eBay publishing completion webhook."""
-    listing_id: int
+    listing_id: str
     ebay_item_id: Optional[str] = None
     ebay_url: Optional[str] = None
     success: bool = True

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
 from core.database import engine, Base
-from api import auth, listings, webhooks
+from api import auth, listings, webhooks, upload
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -28,6 +28,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(listings.router)
 app.include_router(webhooks.router)
+app.include_router(upload.router)
 
 
 @app.get("/")

@@ -12,6 +12,7 @@ class ListingCreate(BaseModel):
     quantity: int
     condition_id: Optional[str] = None
     product_photo_url: Optional[str] = None
+    uploaded_image_urls: Optional[list[str]] = None
     target_audience: Optional[str] = None
     product_features: Optional[str] = None
     video_setting: Optional[str] = None
@@ -26,6 +27,7 @@ class ListingUpdate(BaseModel):
     quantity: Optional[int] = None
     condition_id: Optional[str] = None
     product_photo_url: Optional[str] = None
+    uploaded_image_urls: Optional[list[str]] = None
     target_audience: Optional[str] = None
     product_features: Optional[str] = None
     video_setting: Optional[str] = None
@@ -35,7 +37,7 @@ class ListingUpdate(BaseModel):
 class MediaResponse(BaseModel):
     """Schema for media response."""
     id: int
-    listing_id: int
+    listing_id: str
     image_urls: Optional[list[str]] = None
     video_url: Optional[str] = None
     created_at: datetime
@@ -47,7 +49,7 @@ class MediaResponse(BaseModel):
 class PublishedListingResponse(BaseModel):
     """Schema for published listing response."""
     id: int
-    listing_id: int
+    listing_id: str
     ebay_item_id: str
     ebay_url: str
     published_at: datetime
@@ -58,7 +60,7 @@ class PublishedListingResponse(BaseModel):
 
 class ListingResponse(BaseModel):
     """Schema for listing response."""
-    id: int
+    id: str
     user_id: int
     title: str
     description: str
@@ -67,6 +69,7 @@ class ListingResponse(BaseModel):
     quantity: int
     condition_id: Optional[str] = None
     product_photo_url: Optional[str] = None
+    uploaded_image_urls: Optional[list[str]] = None
     target_audience: Optional[str] = None
     product_features: Optional[str] = None
     video_setting: Optional[str] = None

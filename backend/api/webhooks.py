@@ -14,7 +14,7 @@ def handle_media_complete(
     db: Session = Depends(get_db)
 ):
     """Handle media generation completion webhook from n8n."""
-    listing = db.query(Listing).filter(Listing.id == webhook_data.listing_id).first()
+    listing = db.query(Listing).filter(Listing.id == str(webhook_data.listing_id)).first()
     
     if not listing:
         raise HTTPException(
@@ -63,7 +63,7 @@ def handle_ebay_complete(
     db: Session = Depends(get_db)
 ):
     """Handle eBay publishing completion webhook from n8n."""
-    listing = db.query(Listing).filter(Listing.id == webhook_data.listing_id).first()
+    listing = db.query(Listing).filter(Listing.id == str(webhook_data.listing_id)).first()
     
     if not listing:
         raise HTTPException(

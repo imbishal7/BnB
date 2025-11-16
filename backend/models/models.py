@@ -2,8 +2,14 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, String, Float, Text, DateTime, JSON, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 import enum
+import secrets
 
 from core.database import Base
+
+
+def generate_listing_id():
+    """Generate a random 12-character alphanumeric ID for listings."""
+    return secrets.token_urlsafe(9)[:12]
 
 
 class ListingStatus(str, enum.Enum):
@@ -35,7 +41,7 @@ class Listing(Base):
     """Listing model."""
     __tablename__ = "listings"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(String(12), primary_key=True, index=True, default=generate_listing_id)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     
     # Basic product info
@@ -48,6 +54,7 @@ class Listing(Base):
     
     # Product media and UGC settings
     product_photo_url = Column(String, nullable=True)
+    uploaded_image_urls = Column(JSON, nullable=True)  # User uploaded product images
     target_audience = Column(Text, nullable=True)  # ICP - ideal customer profile
     product_features = Column(Text, nullable=True)
     video_setting = Column(Text, nullable=True)  # Scene/setting for video
@@ -74,7 +81,7 @@ class Media(Base):
     __tablename__ = "media"
     
     id = Column(Integer, primary_key=True, index=True)
-    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=False, unique=True)
+    listing_id = Column(String(12), ForeignKey("listings.id"), nullable=False, unique=True)
     
     # Media URLs (stored as JSON array for images)
     image_urls = Column(JSON, nullable=True)
@@ -93,7 +100,7 @@ class PublishedListing(Base):
     __tablename__ = "published_listings"
     
     id = Column(Integer, primary_key=True, index=True)
-    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=False, unique=True)
+    listing_id = Column(String(12), ForeignKey("listings.id"), nullable=False, unique=True)
     
     # eBay details
     ebay_item_id = Column(String, nullable=False)
