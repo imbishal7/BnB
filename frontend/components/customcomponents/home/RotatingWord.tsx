@@ -10,7 +10,7 @@ export function RotatingWord() {
   useEffect(() => {
     const interval = setInterval(() => {
       setRotatingWord((prev) => (prev + 1) % words.length)
-    }, 2000)
+    }, 1500)
     return () => clearInterval(interval)
   }, [])
 

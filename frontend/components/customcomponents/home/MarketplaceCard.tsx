@@ -27,7 +27,7 @@ export function MarketplaceCard({
       className="relative w-full h-full"
     >
       <Card
-        className={`p-6 text-center transition-all`}
+        className={`p-6 text-center transition-all bg-background/50`}
       >
         <div className="flex items-center justify-center h-16 mb-4">
           <img

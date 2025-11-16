@@ -16,6 +16,8 @@ import {
 import { createListing } from "@/lib/api";
 import { Sparkles, Package, DollarSign, Image, Video } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import '@/app/assets/hero_background.css'
+
 
 const CONDITIONS = [
   { value: "1000", label: "New" },
@@ -200,8 +202,9 @@ export default function NewListingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto max-w-4xl py-12 px-4 sm:px-6 lg:px-8">
+    <div className="relative min-h-screen bg-background">
+      <div className="hero-background min-h-screen absolute top-0 left-0 w-full h-full opacity-30"></div>
+      <div className="container mx-auto max-w-4xl py-12 px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Header Section */}
         <div className="mb-8 space-y-2">
           <div className="flex items-center gap-3">

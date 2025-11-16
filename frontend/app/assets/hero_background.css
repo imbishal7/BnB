@@ -1,8 +1,8 @@
-html {
+.hero-background {
     --s: 222px; /* control the size*/
-    --c1: #7f727b;
-    --c2: #d6b4c2;
-    --c3: #baa0ab;
+    --c1: #0a0a0a;
+    --c2: #151515;
+    --c3: #101010;
     
     --_g: var(--c1) 10%,var(--c2) 10.5% 19%,#0000 19.5% 80.5%,var(--c2) 81% 89.5%,var(--c3) 90%;
     --_c: from -90deg at 37.5% 50%,#0000 75%;

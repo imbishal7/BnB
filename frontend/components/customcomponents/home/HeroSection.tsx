@@ -7,11 +7,13 @@ import { RotatingWord } from './RotatingWord'
 import { WorkflowCard } from './WorkflowCard'
 import { ProductPreview } from './ProductPreview'
 import { MarketplacesSection } from './MarketplacesSection'
+import '@/app/assets/hero_background.css'
 
 export function HeroSection() {
   return (
-    <section className="min-h-screen relative overflow-hidden">
-      <div className="flex flex-col md:gap-8 gap-4 container mx-auto px-4 py-20 md:py-32">
+    <section className="relative min-h-screen overflow-hidden">
+      <div className="hero-background min-h-screen absolute top-0 left-0 w-full h-full opacity-60"></div>
+      <div className="flex flex-col md:gap-8 gap-4 container mx-auto px-4 py-20 md:py-32 relative z-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
