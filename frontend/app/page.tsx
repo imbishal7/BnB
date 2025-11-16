@@ -1,7 +1,16 @@
-export default function Home() {
+'use client'
+
+import {
+  HeroSection,
+  MarketplacesSection,
+  CTASection,
+} from '@/components/customcomponents/home'
+
+export default function HomePage() {
   return (
-    <main>
-      <h1>Welcome</h1>
-    </main>
-  );
+    <div className="min-h-screen bg-background">
+      <HeroSection />
+      <CTASection />
+    </div>
+  )
 }
