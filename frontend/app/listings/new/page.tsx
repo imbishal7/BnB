@@ -522,13 +522,13 @@ export default function NewListingPage() {
             </div>
             
             <div className="space-y-4">
-              <div className="border-2 border-dashed border-border rounded-lg p-6 hover:border-primary/50 transition-colors">
+              <div onClick={() => document.getElementById("image-upload")?.click()} className="border-2 border-dashed border-border rounded-lg p-6 hover:border-primary/50 transition-colors">
                 <div className="flex flex-col items-center gap-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
                     <Upload className="h-6 w-6 text-primary" />
                   </div>
                   <div className="text-center">
-                    <Label htmlFor="image-upload" className="cursor-pointer">
+                    <Label className="cursor-pointer">
                       <span className="text-primary hover:underline font-medium">
                         Click to upload
                       </span>
@@ -541,7 +541,7 @@ export default function NewListingPage() {
                   <Input
                     id="image-upload"
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg, image/jpg, image/png"
                     multiple
                     onChange={handleImageUpload}
                     className="hidden"
@@ -627,12 +627,12 @@ export default function NewListingPage() {
                         Upload a photo of the person/model you want to feature in your UGC content
                       </p>
                       {!avatarPhoto ? (
-                        <div className="border-2 border-dashed border-border rounded-lg p-4 hover:border-primary/50 transition-colors">
+                        <div onClick={() => document.getElementById("avatar-upload")?.click()} className="border-2 border-dashed border-border rounded-lg p-4 hover:border-primary/50 transition-colors">
                           <div className="flex flex-col items-center gap-3">
                             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                               <Upload className="h-5 w-5 text-primary" />
                             </div>
-                            <Label htmlFor="avatar-upload" className="cursor-pointer text-center">
+                            <Label className="cursor-pointer text-center">
                               <span className="text-primary hover:underline font-medium text-sm">
                                 Click to upload avatar photo
                               </span>
@@ -643,7 +643,7 @@ export default function NewListingPage() {
                             <Input
                               id="avatar-upload"
                               type="file"
-                              accept="image/*"
+                              accept="image/jpeg, image/jpg, image/png"
                               onChange={handleAvatarUpload}
                               className="hidden"
                               disabled={isUploading || isSubmitting}
