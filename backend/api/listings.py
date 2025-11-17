@@ -60,59 +60,84 @@ async def create_listing(
             generated_image_urls = []
             generated_video_url = None
             
-            # Generate image if requested
+            # Trigger unified UGC generation
+            media_types = []
             if listing_data.generate_image:
-                print(f"🎨 Generating images for listing {new_listing.id}...")
-                image_response = await n8n_client.trigger_image_generation(
-                    listing_id=new_listing.id,
-                    product_name=new_listing.title,
-                    product_photo_url=new_listing.product_photo_url,
-                    target_audience=new_listing.target_audience or "General audience",
-                    product_features=new_listing.product_features or new_listing.description,
-                    video_setting=new_listing.video_setting or "Casual indoor setting",
-                    image_prompt=new_listing.image_prompt,
-                    model_avatar_url=new_listing.model_avatar_url
-                )
-                
-                # Parse n8n response: [{"data": [{"image_url": "..."}, ...]}]
-                if image_response and isinstance(image_response, list) and len(image_response) > 0:
-                    data_obj = image_response[0].get("data", [])
-                    temp_image_urls = [item.get("image_url") for item in data_obj if item.get("image_url")]
-                    
-                    if temp_image_urls:
-                        print(f"📥 Downloaded {len(temp_image_urls)} images from n8n")
-                        # Download and upload to GCS
-                        generated_image_urls = await gcs_service.download_and_upload_multiple_from_urls(
-                            temp_image_urls,
-                            folder=f"generated/listing_{new_listing.id}"
-                        )
-                        print(f"☁️ Uploaded {len(generated_image_urls)} images to GCS")
-            
-            # Generate video if requested
+                media_types.append("images")
             if listing_data.generate_video:
-                print(f"🎥 Generating video for listing {new_listing.id}...")
-                video_response = await n8n_client.trigger_video_generation(
-                    listing_id=new_listing.id,
-                    product_name=new_listing.title,
-                    product_photo_url=new_listing.product_photo_url,
-                    target_audience=new_listing.target_audience or "General audience",
-                    product_features=new_listing.product_features or new_listing.description,
-                    video_setting=new_listing.video_setting or "Casual indoor setting",
-                    video_prompt=new_listing.video_prompt,
-                    model_avatar_url=new_listing.model_avatar_url
-                )
+                media_types.append("video")
+            
+            print(f"🎨 Generating {' and '.join(media_types)} for listing {new_listing.id}...")
+            
+            ugc_response = await n8n_client.trigger_ugc_generation(
+                listing_id=new_listing.id,
+                product_name=new_listing.title,
+                product_photo_url=new_listing.product_photo_url,
+                target_audience=new_listing.target_audience or "General audience",
+                product_features=new_listing.product_features or new_listing.description,
+                video_setting=new_listing.video_setting or "Casual indoor setting",
+                generate_image=listing_data.generate_image,
+                generate_video=listing_data.generate_video,
+                image_prompt=new_listing.image_prompt,
+                video_prompt=new_listing.video_prompt,
+                model_avatar_url=new_listing.model_avatar_url
+            )
+            
+            # Parse n8n response
+            # Response format when both are generated: 
+            # [{"video_url": "..."}, {"data": [{"image_url": "..."}, ...]}]
+            if ugc_response and isinstance(ugc_response, list):
+                print(f"📦 Received n8n response with {len(ugc_response)} item(s)")
                 
-                # Parse video response (format TBD based on n8n video response)
-                if video_response and isinstance(video_response, dict):
-                    temp_video_url = video_response.get("video_url")
-                    if temp_video_url:
-                        print(f"📥 Downloaded video from n8n")
-                        # Download and upload to GCS
-                        generated_video_url = await gcs_service.download_and_upload_from_url(
-                            temp_video_url,
-                            folder=f"generated/listing_{new_listing.id}"
-                        )
-                        print(f"☁️ Uploaded video to GCS")
+                # Parse video from response
+                if listing_data.generate_video:
+                    video_obj = None
+                    # Look for video_url in any of the array items
+                    for item in ugc_response:
+                        if isinstance(item, dict) and "video_url" in item:
+                            video_obj = item
+                            break
+                    
+                    if video_obj and video_obj.get("video_url"):
+                        temp_video_url = video_obj["video_url"]
+                        print(f"📥 Downloading video from n8n: {temp_video_url[:50]}...")
+                        try:
+                            generated_video_url = await gcs_service.download_and_upload_from_url(
+                                temp_video_url,
+                                folder=f"generated/listing_{new_listing.id}"
+                            )
+                            print(f"☁️ Video uploaded to GCS: {generated_video_url}")
+                        except Exception as e:
+                            print(f"❌ Failed to download/upload video: {str(e)}")
+                
+                # Parse images from response
+                if listing_data.generate_image:
+                    image_obj = None
+                    # Look for data array with image_urls in any of the array items
+                    for item in ugc_response:
+                        if isinstance(item, dict) and "data" in item:
+                            image_obj = item
+                            break
+                    
+                    if image_obj and image_obj.get("data"):
+                        data_array = image_obj["data"]
+                        if isinstance(data_array, list):
+                            temp_image_urls = [
+                                item.get("image_url") 
+                                for item in data_array 
+                                if isinstance(item, dict) and item.get("image_url")
+                            ]
+                            
+                            if temp_image_urls:
+                                print(f"📥 Downloading {len(temp_image_urls)} images from n8n")
+                                try:
+                                    generated_image_urls = await gcs_service.download_and_upload_multiple_from_urls(
+                                        temp_image_urls,
+                                        folder=f"generated/listing_{new_listing.id}"
+                                    )
+                                    print(f"☁️ Uploaded {len(generated_image_urls)} images to GCS")
+                                except Exception as e:
+                                    print(f"❌ Failed to download/upload images: {str(e)}")
             
             # Save media to database if any generated
             if generated_image_urls or generated_video_url:
@@ -274,37 +299,21 @@ async def generate_media(
     listing.status = ListingStatus.GENERATING_MEDIA
     db.commit()
     
-    # Trigger n8n workflows
+    # Trigger n8n unified workflow
     try:
-        results = []
-        
-        # Generate image if requested
-        if generate_image:
-            image_result = await n8n_client.trigger_image_generation(
-                listing_id=listing.id,
-                product_name=listing.title,
-                product_photo_url=listing.product_photo_url,
-                target_audience=listing.target_audience or "General audience",
-                product_features=listing.product_features or listing.description,
-                video_setting=listing.video_setting or "Casual indoor setting",
-                image_prompt=listing.image_prompt,
-                model_avatar_url=listing.model_avatar_url
-            )
-            results.append(("image", image_result))
-        
-        # Generate video if requested
-        if generate_video:
-            video_result = await n8n_client.trigger_video_generation(
-                listing_id=listing.id,
-                product_name=listing.title,
-                product_photo_url=listing.product_photo_url,
-                target_audience=listing.target_audience or "General audience",
-                product_features=listing.product_features or listing.description,
-                video_setting=listing.video_setting or "Casual indoor setting",
-                video_prompt=listing.video_prompt,
-                model_avatar_url=listing.model_avatar_url
-            )
-            results.append(("video", video_result))
+        result = await n8n_client.trigger_ugc_generation(
+            listing_id=listing.id,
+            product_name=listing.title,
+            product_photo_url=listing.product_photo_url,
+            target_audience=listing.target_audience or "General audience",
+            product_features=listing.product_features or listing.description,
+            video_setting=listing.video_setting or "Casual indoor setting",
+            generate_image=generate_image,
+            generate_video=generate_video,
+            image_prompt=listing.image_prompt,
+            video_prompt=listing.video_prompt,
+            model_avatar_url=listing.model_avatar_url
+        )
             
     except Exception as e:
         listing.status = ListingStatus.ERROR
