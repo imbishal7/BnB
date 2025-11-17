@@ -54,8 +54,8 @@ async def upload_images(
             )
     
     try:
-        # Upload to GCS
-        urls = gcs_service.upload_multiple_files(files, folder=f"listings/user_{current_user.id}")
+        # Upload to GCS - store directly in listings folder without user subdirectory
+        urls = gcs_service.upload_multiple_files(files, folder="listings")
         
         return UploadResponse(urls=urls, count=len(urls))
     except Exception as e:

@@ -8,9 +8,12 @@ import {
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="relative min-h-screen bg-background">
+            <div className="hero-background min-h-screen absolute top-0 left-0 w-full h-full opacity-60"></div>
+
+<div className="z10">
       <HeroSection />
-      <CTASection />
+      <CTASection /> </div>
     </div>
   )
 }

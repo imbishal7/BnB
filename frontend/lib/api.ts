@@ -174,6 +174,19 @@ export async function generateMedia(id: string | number, mediaType?: 'images' | 
   });
 }
 
+export async function updateListing(id: string | number, data: Partial<CreateListingRequest>): Promise<ListingResponse> {
+  return apiRequest<ListingResponse>(`/listings/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteListing(id: string | number): Promise<void> {
+  return apiRequest<void>(`/listings/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 // Upload API functions
 export async function uploadImages(files: File[]): Promise<UploadResponse> {
   const token = getAuthToken();
