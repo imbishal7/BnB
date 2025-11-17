@@ -3,27 +3,18 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { approveMedia, generateMedia } from "@/lib/api";
+import { approveMedia, generateMedia, getListing } from "@/lib/api";
 import { CheckCircle2, RefreshCw, Image as ImageIcon, Video, ArrowLeft, Loader2, Check, Download } from "lucide-react";
-import generated_image_1 from "@/app/assets/generated_image_1.png"
 import '@/app/assets/hero_background.css';
-import { StaticImageData } from "next/image";
 interface ListingData {
   id: string;
   title: string;
   description: string;
   status: string;
-  image_urls?: StaticImageData[];
-  video_url?: string;
-}
-
-const data = {
-    id: "1",
-    title: "Water Bottle",
-    description: "A water bottle for drinking water",
-    status: "media_ready",
-    image_urls: [generated_image_1, generated_image_1, generated_image_1],
-    video_url: "/generated_video.mp4",
+  media?: {
+    image_urls?: string[];
+    video_url?: string;
+  };
 }
 
 export default function MediaReviewPage() {
@@ -31,7 +22,7 @@ export default function MediaReviewPage() {
   const params = useParams();
   const listingId = params.id as string;
 
-  const [listing, setListing] = useState<ListingData>(data);
+  const [listing, setListing] = useState<ListingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isApproving, setIsApproving] = useState(false);
@@ -49,6 +40,8 @@ export default function MediaReviewPage() {
     try {
       setLoading(true);
       setError(null);
+      const data = await getListing(listingId);
+      setListing(data as ListingData);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load listing"
@@ -87,12 +80,12 @@ export default function MediaReviewPage() {
   };
 
   const handleSelectAll = () => {
-    if (!listing.image_urls) return;
-    const allSelected = listing.image_urls.length === selectedImages.size;
+    if (!listing?.media?.image_urls) return;
+    const allSelected = listing.media.image_urls.length === selectedImages.size;
     if (allSelected) {
       setSelectedImages(new Set());
     } else {
-      setSelectedImages(new Set(listing.image_urls.map((_, index) => index)));
+      setSelectedImages(new Set(listing.media.image_urls.map((_, index) => index)));
     }
   };
 
@@ -130,18 +123,15 @@ export default function MediaReviewPage() {
     }
   };
 
-  const handleDownloadImage = async (imageUrl: string | StaticImageData, index: number) => {
+  const handleDownloadImage = async (imageUrl: string, index: number) => {
     try {
-      const url = typeof imageUrl === 'string' ? imageUrl : imageUrl.src;
-      // Handle both absolute URLs and relative paths
-      const fetchUrl = url.startsWith('http') || url.startsWith('//') ? url : url.startsWith('/') ? url : `/${url}`;
-      const response = await fetch(fetchUrl);
+      const response = await fetch(imageUrl);
       if (!response.ok) throw new Error('Failed to fetch image');
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
-      const extension = blob.type.split('/')[1] || url.split('.').pop() || 'png';
+      const extension = blob.type.split('/')[1] || imageUrl.split('.').pop() || 'png';
       link.download = `listing-image-${index + 1}.${extension}`;
       document.body.appendChild(link);
       link.click();
@@ -213,8 +203,8 @@ export default function MediaReviewPage() {
     return null;
   }
 
-  const hasImages = listing.image_urls && listing.image_urls.length > 0;
-  const hasVideo = listing.video_url;
+  const hasImages = listing.media?.image_urls && listing.media.image_urls.length > 0;
+  const hasVideo = listing.media?.video_url;
 
   return (
     <div className="relative min-h-screen bg-background">
@@ -253,7 +243,7 @@ export default function MediaReviewPage() {
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
-                    {hasImages && listing.image_urls!.length > 0 && (
+                    {hasImages && listing.media!.image_urls!.length > 0 && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -261,7 +251,7 @@ export default function MediaReviewPage() {
                         disabled={isRegeneratingImages || isRegeneratingVideo || isApproving}
                         className="h-9"
                       >
-                        {selectedImages.size === listing.image_urls!.length ? "Deselect All" : "Select All"}
+                        {selectedImages.size === listing.media!.image_urls!.length ? "Deselect All" : "Select All"}
                       </Button>
                     )}
                     <Button
@@ -288,7 +278,7 @@ export default function MediaReviewPage() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {listing.image_urls!.map((url, index) => {
+                  {listing.media!.image_urls!.map((url, index) => {
                     const isSelected = selectedImages.has(index);
                     return (
                       <div
@@ -301,11 +291,11 @@ export default function MediaReviewPage() {
                             return;
                           }
                           // Otherwise, open image in new tab
-                          window.open(url.src as string, "_blank");
+                          window.open(url, "_blank");
                         }}
                       >
                         <img
-                          src={url.src}
+                          src={url}
                           alt={`Generated image ${index + 1}`}
                           className="w-full h-full object-contain transition-transform group-hover:scale-105"
                           onError={(e) => {
@@ -392,7 +382,7 @@ export default function MediaReviewPage() {
                     className="w-full h-full"
                     controls preload="auto"
                   >
-                    <source src={listing.video_url} type="video/mp4" />
+                    <source src={listing.media!.video_url} type="video/mp4" />
                     Your browser does not support the video tag.
                   </video>
                   {/* Download button */}
@@ -400,7 +390,7 @@ export default function MediaReviewPage() {
                     className="absolute top-2 right-2 w-10 h-10 rounded-full bg-background/80 backdrop-blur-sm border-2 border-border hover:bg-accent flex items-center justify-center transition-all z-10"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDownloadVideo(listing.video_url!);
+                      handleDownloadVideo(listing.media!.video_url!);
                     }}
                     aria-label="Download video"
                   >

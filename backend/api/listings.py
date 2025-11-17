@@ -3,22 +3,23 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from models import User, Listing, ListingStatus
+from models import User, Listing, ListingStatus, Media
 from .dependencies import get_current_user
 from .listing_schemas import ListingCreate, ListingUpdate, ListingResponse
 from services.n8n_client import N8nClient
+from services.gcs_service import gcs_service
 
 router = APIRouter(prefix="/listings", tags=["listings"])
 n8n_client = N8nClient()
 
 
 @router.post("", response_model=ListingResponse, status_code=status.HTTP_201_CREATED)
-def create_listing(
+async def create_listing(
     listing_data: ListingCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new listing."""
+    """Create a new listing and trigger media generation if requested."""
     new_listing = Listing(
         user_id=current_user.id,
         title=listing_data.title,
@@ -29,9 +30,12 @@ def create_listing(
         condition_id=listing_data.condition_id,
         product_photo_url=listing_data.product_photo_url,
         uploaded_image_urls=listing_data.uploaded_image_urls,
+        model_avatar_url=listing_data.model_avatar_url,
         target_audience=listing_data.target_audience,
         product_features=listing_data.product_features,
         video_setting=listing_data.video_setting,
+        image_prompt=listing_data.image_prompt,
+        video_prompt=listing_data.video_prompt,
         status=ListingStatus.DRAFT
     )
     
@@ -39,6 +43,113 @@ def create_listing(
     db.commit()
     db.refresh(new_listing)
     
+    # Trigger media generation if requested
+    if listing_data.generate_image or listing_data.generate_video:
+        if not listing_data.product_photo_url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Product photo is required for media generation"
+            )
+        
+        # Update status to generating
+        new_listing.status = ListingStatus.GENERATING_MEDIA
+        db.commit()
+        
+        # Trigger n8n workflows asynchronously
+        try:
+            generated_image_urls = []
+            generated_video_url = None
+            
+            # Generate image if requested
+            if listing_data.generate_image:
+                print(f"🎨 Generating images for listing {new_listing.id}...")
+                image_response = await n8n_client.trigger_image_generation(
+                    listing_id=new_listing.id,
+                    product_name=new_listing.title,
+                    product_photo_url=new_listing.product_photo_url,
+                    target_audience=new_listing.target_audience or "General audience",
+                    product_features=new_listing.product_features or new_listing.description,
+                    video_setting=new_listing.video_setting or "Casual indoor setting",
+                    image_prompt=new_listing.image_prompt,
+                    model_avatar_url=new_listing.model_avatar_url
+                )
+                
+                # Parse n8n response: [{"data": [{"image_url": "..."}, ...]}]
+                if image_response and isinstance(image_response, list) and len(image_response) > 0:
+                    data_obj = image_response[0].get("data", [])
+                    temp_image_urls = [item.get("image_url") for item in data_obj if item.get("image_url")]
+                    
+                    if temp_image_urls:
+                        print(f"📥 Downloaded {len(temp_image_urls)} images from n8n")
+                        # Download and upload to GCS
+                        generated_image_urls = await gcs_service.download_and_upload_multiple_from_urls(
+                            temp_image_urls,
+                            folder=f"generated/listing_{new_listing.id}"
+                        )
+                        print(f"☁️ Uploaded {len(generated_image_urls)} images to GCS")
+            
+            # Generate video if requested
+            if listing_data.generate_video:
+                print(f"🎥 Generating video for listing {new_listing.id}...")
+                video_response = await n8n_client.trigger_video_generation(
+                    listing_id=new_listing.id,
+                    product_name=new_listing.title,
+                    product_photo_url=new_listing.product_photo_url,
+                    target_audience=new_listing.target_audience or "General audience",
+                    product_features=new_listing.product_features or new_listing.description,
+                    video_setting=new_listing.video_setting or "Casual indoor setting",
+                    video_prompt=new_listing.video_prompt,
+                    model_avatar_url=new_listing.model_avatar_url
+                )
+                
+                # Parse video response (format TBD based on n8n video response)
+                if video_response and isinstance(video_response, dict):
+                    temp_video_url = video_response.get("video_url")
+                    if temp_video_url:
+                        print(f"📥 Downloaded video from n8n")
+                        # Download and upload to GCS
+                        generated_video_url = await gcs_service.download_and_upload_from_url(
+                            temp_video_url,
+                            folder=f"generated/listing_{new_listing.id}"
+                        )
+                        print(f"☁️ Uploaded video to GCS")
+            
+            # Save media to database if any generated
+            if generated_image_urls or generated_video_url:
+                # Check if media record exists
+                media = db.query(Media).filter(Media.listing_id == new_listing.id).first()
+                if media:
+                    # Update existing media
+                    if generated_image_urls:
+                        media.image_urls = generated_image_urls
+                    if generated_video_url:
+                        media.video_url = generated_video_url
+                else:
+                    # Create new media record
+                    media = Media(
+                        listing_id=new_listing.id,
+                        image_urls=generated_image_urls if generated_image_urls else None,
+                        video_url=generated_video_url
+                    )
+                    db.add(media)
+                
+                # Update listing status to media ready
+                new_listing.status = ListingStatus.MEDIA_READY
+                db.commit()
+                print(f"✅ Media saved to database for listing {new_listing.id}")
+            else:
+                # No media generated, but no error either
+                new_listing.status = ListingStatus.DRAFT
+                db.commit()
+                
+        except Exception as e:
+            # Log error but don't fail the listing creation
+            print(f"❌ Error in media generation: {str(e)}")
+            new_listing.status = ListingStatus.ERROR
+            new_listing.error_message = f"Failed to trigger media generation: {str(e)}"
+            db.commit()
+    
+    db.refresh(new_listing)
     return new_listing
 
 
@@ -129,6 +240,8 @@ def delete_listing(
 @router.post("/{listing_id}/generate-media", response_model=ListingResponse)
 async def generate_media(
     listing_id: str,
+    generate_image: bool = True,
+    generate_video: bool = True,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -150,20 +263,49 @@ async def generate_media(
             detail="Product photo URL is required"
         )
     
+    # Validate at least one generation type is requested
+    if not generate_image and not generate_video:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Must request at least image or video generation"
+        )
+    
     # Update status
     listing.status = ListingStatus.GENERATING_MEDIA
     db.commit()
     
-    # Trigger n8n workflow
+    # Trigger n8n workflows
     try:
-        await n8n_client.trigger_media_generation(
-            listing_id=listing.id,
-            product_name=listing.title,
-            product_photo_url=listing.product_photo_url,
-            target_audience=listing.target_audience or "General audience",
-            product_features=listing.product_features or listing.description,
-            video_setting=listing.video_setting or "Casual indoor setting"
-        )
+        results = []
+        
+        # Generate image if requested
+        if generate_image:
+            image_result = await n8n_client.trigger_image_generation(
+                listing_id=listing.id,
+                product_name=listing.title,
+                product_photo_url=listing.product_photo_url,
+                target_audience=listing.target_audience or "General audience",
+                product_features=listing.product_features or listing.description,
+                video_setting=listing.video_setting or "Casual indoor setting",
+                image_prompt=listing.image_prompt,
+                model_avatar_url=listing.model_avatar_url
+            )
+            results.append(("image", image_result))
+        
+        # Generate video if requested
+        if generate_video:
+            video_result = await n8n_client.trigger_video_generation(
+                listing_id=listing.id,
+                product_name=listing.title,
+                product_photo_url=listing.product_photo_url,
+                target_audience=listing.target_audience or "General audience",
+                product_features=listing.product_features or listing.description,
+                video_setting=listing.video_setting or "Casual indoor setting",
+                video_prompt=listing.video_prompt,
+                model_avatar_url=listing.model_avatar_url
+            )
+            results.append(("video", video_result))
+            
     except Exception as e:
         listing.status = ListingStatus.ERROR
         listing.error_message = str(e)

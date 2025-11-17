@@ -55,9 +55,12 @@ class Listing(Base):
     # Product media and UGC settings
     product_photo_url = Column(String, nullable=True)
     uploaded_image_urls = Column(JSON, nullable=True)  # User uploaded product images
+    model_avatar_url = Column(String, nullable=True)  # Optional avatar/model photo for UGC
     target_audience = Column(Text, nullable=True)  # ICP - ideal customer profile
     product_features = Column(Text, nullable=True)
     video_setting = Column(Text, nullable=True)  # Scene/setting for video
+    image_prompt = Column(Text, nullable=True)  # Custom prompt for image generation
+    video_prompt = Column(Text, nullable=True)  # Custom prompt for video generation
     
     # Enriched content
     enriched_description = Column(Text, nullable=True)

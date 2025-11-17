@@ -13,9 +13,14 @@ class ListingCreate(BaseModel):
     condition_id: Optional[str] = None
     product_photo_url: Optional[str] = None
     uploaded_image_urls: Optional[list[str]] = None
+    model_avatar_url: Optional[str] = None
     target_audience: Optional[str] = None
     product_features: Optional[str] = None
     video_setting: Optional[str] = None
+    image_prompt: Optional[str] = None
+    video_prompt: Optional[str] = None
+    generate_image: Optional[bool] = False
+    generate_video: Optional[bool] = False
 
 
 class ListingUpdate(BaseModel):
@@ -28,9 +33,12 @@ class ListingUpdate(BaseModel):
     condition_id: Optional[str] = None
     product_photo_url: Optional[str] = None
     uploaded_image_urls: Optional[list[str]] = None
+    model_avatar_url: Optional[str] = None
     target_audience: Optional[str] = None
     product_features: Optional[str] = None
     video_setting: Optional[str] = None
+    image_prompt: Optional[str] = None
+    video_prompt: Optional[str] = None
     status: Optional[str] = None
 
 
@@ -70,9 +78,12 @@ class ListingResponse(BaseModel):
     condition_id: Optional[str] = None
     product_photo_url: Optional[str] = None
     uploaded_image_urls: Optional[list[str]] = None
+    model_avatar_url: Optional[str] = None
     target_audience: Optional[str] = None
     product_features: Optional[str] = None
     video_setting: Optional[str] = None
+    image_prompt: Optional[str] = None
+    video_prompt: Optional[str] = None
     enriched_description: Optional[str] = None
     status: str
     error_message: Optional[str] = None

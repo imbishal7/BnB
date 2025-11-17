@@ -1,6 +1,8 @@
 """Google Cloud Storage service for uploading files."""
 import os
 import uuid
+import httpx
+from io import BytesIO
 from typing import List
 from fastapi import UploadFile
 from google.cloud import storage
@@ -92,6 +94,70 @@ class GCSService:
         except Exception as e:
             print(f"Error deleting file: {str(e)}")
             return False
+    
+    async def download_and_upload_from_url(self, source_url: str, folder: str = "generated") -> str:
+        """
+        Download an image from a URL and upload it to GCS.
+        
+        Args:
+            source_url: URL of the image to download
+            folder: Folder path in the bucket
+            
+        Returns:
+            Public URL of the uploaded file in GCS
+        """
+        async with httpx.AsyncClient() as client:
+            # Download the image
+            response = await client.get(source_url, timeout=60.0)
+            response.raise_for_status()
+            
+            # Get content type from response headers
+            content_type = response.headers.get('content-type', 'image/png')
+            
+            # Determine file extension from content type or URL
+            if 'png' in content_type or source_url.endswith('.png'):
+                extension = '.png'
+            elif 'jpeg' in content_type or 'jpg' in content_type or source_url.endswith(('.jpg', '.jpeg')):
+                extension = '.jpg'
+            elif 'webp' in content_type or source_url.endswith('.webp'):
+                extension = '.webp'
+            else:
+                extension = '.png'  # default
+            
+            # Generate unique filename
+            unique_filename = f"{uuid.uuid4()}{extension}"
+            blob_name = f"{folder}/{unique_filename}"
+            
+            # Upload to GCS
+            blob = self.bucket.blob(blob_name)
+            blob.upload_from_file(BytesIO(response.content), content_type=content_type)
+            
+            public_url = blob.public_url
+            print(f"✅ Downloaded and uploaded: {blob_name}")
+            print(f"📎 Public URL: {public_url}")
+            return public_url
+    
+    async def download_and_upload_multiple_from_urls(self, source_urls: List[str], folder: str = "generated") -> List[str]:
+        """
+        Download multiple images from URLs and upload them to GCS.
+        
+        Args:
+            source_urls: List of URLs to download
+            folder: Folder path in the bucket
+            
+        Returns:
+            List of public URLs in GCS
+        """
+        uploaded_urls = []
+        for url in source_urls:
+            try:
+                gcs_url = await self.download_and_upload_from_url(url, folder)
+                uploaded_urls.append(gcs_url)
+            except Exception as e:
+                print(f"❌ Error downloading/uploading {url}: {str(e)}")
+                # Continue with other images even if one fails
+        
+        return uploaded_urls
 
 
 # Create a singleton instance

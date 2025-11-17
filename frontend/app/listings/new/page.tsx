@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createListing, uploadImages } from "@/lib/api";
-import { Sparkles, Package, DollarSign, Image, Video, Upload, X, Loader2 } from "lucide-react";
+import { Sparkles, Package, DollarSign, Image, Video, Upload, X, Loader2, User } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import '@/app/assets/hero_background.css'
 
@@ -80,6 +80,8 @@ export default function NewListingPage() {
   const [enableVideoGeneration, setEnableVideoGeneration] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]);
+  const [avatarPhoto, setAvatarPhoto] = useState<File | null>(null);
+  const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -89,7 +91,6 @@ export default function NewListingPage() {
     price: "",
     quantity: "",
     condition: "",
-    product_photo_url: "",
     target_audience: "",
     product_features: "",
     video_setting: "",
@@ -111,7 +112,9 @@ export default function NewListingPage() {
   const handleImageToggle = (checked: boolean) => {
     setEnableImageGeneration(checked);
     if (!checked) {
-      setFormData((prev) => ({ ...prev, product_photo_url: "", target_audience: "", product_features: "" }));
+      setFormData((prev) => ({ ...prev, target_audience: "", product_features: "" }));
+      setAvatarPhoto(null);
+      setAvatarPhotoUrl("");
     }
   };
 
@@ -156,6 +159,35 @@ export default function NewListingPage() {
     setUploadedImageUrls(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setError('Please upload an image file (JPEG, PNG, WebP)');
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setError('Avatar photo must be less than 10MB');
+      return;
+    }
+
+    setAvatarPhoto(file);
+    setError(null);
+  };
+
+  const removeAvatarPhoto = () => {
+    setAvatarPhoto(null);
+    setAvatarPhotoUrl("");
+  };
+
   const uploadImagesToCloud = async () => {
     if (uploadedImages.length === 0) return [];
 
@@ -196,8 +228,8 @@ export default function NewListingPage() {
       setError("Condition is required");
       return false;
     }
-    if (enableImageGeneration && !formData.product_photo_url.trim()) {
-      setError("Product photo URL is required when image generation is enabled");
+    if (uploadedImages.length === 0) {
+      setError("At least one product image is required");
       return false;
     }
     if (enableVideoGeneration && !formData.video_setting.trim()) {
@@ -218,10 +250,23 @@ export default function NewListingPage() {
     setIsSubmitting(true);
 
     try {
-      // Upload images to GCS first if any
+      // Upload product images to GCS
       let imageUrls: string[] = [];
       if (uploadedImages.length > 0) {
         imageUrls = await uploadImagesToCloud();
+      }
+
+      // Upload avatar photo if provided (for AI generation)
+      let avatarUrl = "";
+      if (avatarPhoto) {
+        try {
+          const avatarResponse = await uploadImages([avatarPhoto]);
+          avatarUrl = avatarResponse.urls[0];
+          setAvatarPhotoUrl(avatarUrl);
+        } catch (err) {
+          console.error("Failed to upload avatar photo:", err);
+          // Continue even if avatar upload fails since it's optional
+        }
       }
 
       const listingData: {
@@ -233,9 +278,12 @@ export default function NewListingPage() {
         condition_id: string;
         uploaded_image_urls?: string[];
         product_photo_url?: string;
+        model_avatar_url?: string;
         target_audience?: string;
         product_features?: string;
         video_setting?: string;
+        generate_image?: boolean;
+        generate_video?: boolean;
       } = {
         title: formData.title.trim(),
         description: formData.description.trim(),
@@ -243,15 +291,22 @@ export default function NewListingPage() {
         price: parseFloat(formData.price),
         quantity: parseInt(formData.quantity),
         condition_id: formData.condition,
+        generate_image: enableImageGeneration,
+        generate_video: enableVideoGeneration,
       };
 
       // Add uploaded image URLs
       if (imageUrls.length > 0) {
         listingData.uploaded_image_urls = imageUrls;
+        // Use first product image as the main product photo for AI generation
+        listingData.product_photo_url = imageUrls[0];
       }
 
       if (enableImageGeneration) {
-        listingData.product_photo_url = formData.product_photo_url.trim();
+        // Set model avatar URL if provided
+        if (avatarUrl) {
+          listingData.model_avatar_url = avatarUrl;
+        }
         listingData.target_audience = formData.target_audience.trim();
         listingData.product_features = formData.product_features.trim();
       }
@@ -459,10 +514,10 @@ export default function NewListingPage() {
             <div className="mb-6 space-y-1">
               <h2 className="text-xl font-semibold flex items-center gap-2">
                 <Image className="h-5 w-5 text-primary" />
-                Product Images
+                Product Images *
               </h2>
               <p className="text-sm text-muted-foreground">
-                Upload actual photos of your product (optional but recommended)
+                Upload actual photos of your product (at least one required)
               </p>
             </div>
             
@@ -564,18 +619,57 @@ export default function NewListingPage() {
                 {enableImageGeneration && (
                   <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
                     <div className="space-y-2">
-                      <Label htmlFor="product_photo_url" className="text-sm font-medium">
-                        Product Photo URL *
+                      <Label htmlFor="avatar-upload" className="text-sm font-medium flex items-center gap-2">
+                        <User className="h-4 w-4" />
+                        Avatar/Model Photo (Optional)
                       </Label>
-                      <Input
-                        id="product_photo_url"
-                        name="product_photo_url"
-                        type="url"
-                        value={formData.product_photo_url}
-                        onChange={handleChange}
-                        placeholder="https://example.com/product-image.jpg"
-                        required
-                      />
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Upload a photo of the person/model you want to feature in your UGC content
+                      </p>
+                      {!avatarPhoto ? (
+                        <div className="border-2 border-dashed border-border rounded-lg p-4 hover:border-primary/50 transition-colors">
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                              <Upload className="h-5 w-5 text-primary" />
+                            </div>
+                            <Label htmlFor="avatar-upload" className="cursor-pointer text-center">
+                              <span className="text-primary hover:underline font-medium text-sm">
+                                Click to upload avatar photo
+                              </span>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                PNG, JPG, or WebP (max 10MB)
+                              </p>
+                            </Label>
+                            <Input
+                              id="avatar-upload"
+                              type="file"
+                              accept="image/*"
+                              onChange={handleAvatarUpload}
+                              className="hidden"
+                              disabled={isUploading || isSubmitting}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="relative border rounded-lg overflow-hidden">
+                          <img
+                            src={URL.createObjectURL(avatarPhoto)}
+                            alt="Avatar preview"
+                            className="w-full h-48 object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={removeAvatarPhoto}
+                            className="absolute top-2 right-2 h-8 w-8 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:bg-destructive/90 transition-colors"
+                            disabled={isUploading || isSubmitting}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-sm p-2 truncate">
+                            {avatarPhoto.name}
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="target_audience" className="text-sm font-medium">
@@ -623,20 +717,22 @@ export default function NewListingPage() {
                   />
                 </div>
                 {enableVideoGeneration && (
-                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <Label htmlFor="video_setting" className="text-sm font-medium">
-                      Video Setting *
-                    </Label>
-                    <Textarea
-                      id="video_setting"
-                      name="video_setting"
-                      value={formData.video_setting}
-                      onChange={handleChange}
-                      placeholder="e.g., A cyclist with water bottle in outdoor setting"
-                      rows={4}
-                      className="resize-none"
-                      required
-                    />
+                  <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="space-y-2">
+                      <Label htmlFor="video_setting" className="text-sm font-medium">
+                        Video Setting *
+                      </Label>
+                      <Textarea
+                        id="video_setting"
+                        name="video_setting"
+                        value={formData.video_setting}
+                        onChange={handleChange}
+                        placeholder="e.g., A cyclist with water bottle in outdoor setting"
+                        rows={4}
+                        className="resize-none"
+                        required
+                      />
+                    </div>
                   </div>
                 )}
               </div>
