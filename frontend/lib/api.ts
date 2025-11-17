@@ -176,7 +176,7 @@ export async function generateMedia(id: string | number, mediaType?: 'images' | 
 
 export async function updateListing(id: string | number, data: Partial<CreateListingRequest>): Promise<ListingResponse> {
   return apiRequest<ListingResponse>(`/listings/${id}`, {
-    method: 'PUT',
+    method: 'PATCH',
     body: JSON.stringify(data),
   });
 }

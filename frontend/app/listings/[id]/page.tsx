@@ -9,6 +9,14 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { 
   ArrowLeft, 
   Edit, 
@@ -24,7 +32,8 @@ import {
   Play,
   Save,
   X,
-  Upload
+  Upload,
+  User
 } from 'lucide-react'
 import { getListing, ListingResponse, updateListing, deleteListing, uploadImages } from '@/lib/api'
 import '@/app/assets/hero_background.css'
@@ -41,6 +50,10 @@ export default function ListingDetailPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [uploadingImages, setUploadingImages] = useState(false)
+  const [enableImageGeneration, setEnableImageGeneration] = useState(false)
+  const [enableVideoGeneration, setEnableVideoGeneration] = useState(false)
+  const [avatarPhoto, setAvatarPhoto] = useState<File | null>(null)
+  const [avatarPhotoPreview, setAvatarPhotoPreview] = useState<string>('')
   
   // Edit form state
   const [editForm, setEditForm] = useState({
@@ -50,11 +63,63 @@ export default function ListingDetailPage() {
     quantity: 0,
     category_id: '',
     condition_id: '',
-    product_photo_url: '',
     target_audience: '',
     product_features: '',
     video_setting: '',
   })
+
+  const CONDITIONS = [
+    { value: "1000", label: "New" },
+    { value: "1500", label: "New other (see details)" },
+    { value: "1750", label: "New with defects" },
+    { value: "2000", label: "Certified - Refurbished" },
+    { value: "2500", label: "Excellent - Refurbished" },
+    { value: "3000", label: "Very Good - Refurbished" },
+    { value: "4000", label: "Good - Refurbished" },
+    { value: "5000", label: "Seller Refurbished" },
+    { value: "6000", label: "Used" },
+    { value: "7000", label: "Very Good" },
+    { value: "8000", label: "Good" },
+    { value: "9000", label: "Acceptable" },
+    { value: "10000", label: "For parts or not working" },
+  ]
+
+  const CATEGORIES = [
+    { value: "1", label: "Antiques" },
+    { value: "2", label: "Art" },
+    { value: "3", label: "Baby" },
+    { value: "4", label: "Books" },
+    { value: "5", label: "Business & Industrial" },
+    { value: "6", label: "Cameras & Photo" },
+    { value: "7", label: "Cell Phones & Accessories" },
+    { value: "8", label: "Clothing, Shoes & Accessories" },
+    { value: "9", label: "Coins & Paper Money" },
+    { value: "10", label: "Collectibles" },
+    { value: "11", label: "Computers/Tablets & Networking" },
+    { value: "12", label: "Consumer Electronics" },
+    { value: "13", label: "Crafts" },
+    { value: "14", label: "Dolls & Bears" },
+    { value: "15", label: "DVDs & Movies" },
+    { value: "16", label: "Entertainment Memorabilia" },
+    { value: "17", label: "Gift Cards & Coupons" },
+    { value: "18", label: "Health & Beauty" },
+    { value: "19", label: "Home & Garden" },
+    { value: "20", label: "Jewelry & Watches" },
+    { value: "21", label: "Music" },
+    { value: "22", label: "Musical Instruments & Gear" },
+    { value: "23", label: "Pet Supplies" },
+    { value: "24", label: "Pottery & Glass" },
+    { value: "25", label: "Real Estate" },
+    { value: "26", label: "Specialty Services" },
+    { value: "27", label: "Sporting Goods" },
+    { value: "28", label: "Sports Mem, Cards & Fan Shop" },
+    { value: "29", label: "Stamps" },
+    { value: "30", label: "Tickets & Experiences" },
+    { value: "31", label: "Toys & Hobbies" },
+    { value: "32", label: "Travel" },
+    { value: "33", label: "Video Games & Consoles" },
+    { value: "34", label: "Everything Else" },
+  ]
 
   useEffect(() => {
     const fetchListing = async () => {
@@ -72,11 +137,14 @@ export default function ListingDetailPage() {
           quantity: data.quantity,
           category_id: data.category_id || '',
           condition_id: data.condition_id || '',
-          product_photo_url: data.product_photo_url || '',
           target_audience: data.target_audience || '',
           product_features: data.product_features || '',
           video_setting: data.video_setting || '',
         })
+        
+        // Set switches based on existing data
+        setEnableImageGeneration(!!(data.target_audience || data.product_features))
+        setEnableVideoGeneration(!!data.video_setting)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load listing')
         console.error('Error fetching listing:', err)
@@ -156,6 +224,35 @@ export default function ListingDetailPage() {
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to remove image')
     }
+  }
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const file = files[0]
+    
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      alert('Please upload an image file (JPEG, PNG, WebP)')
+      return
+    }
+
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024
+    if (file.size > maxSize) {
+      alert('Avatar photo must be less than 10MB')
+      return
+    }
+
+    setAvatarPhoto(file)
+    setAvatarPhotoPreview(URL.createObjectURL(file))
+  }
+
+  const removeAvatarPhoto = () => {
+    setAvatarPhoto(null)
+    setAvatarPhotoPreview('')
   }
 
   const getStatusBadge = (status: string) => {
@@ -303,63 +400,91 @@ export default function ListingDetailPage() {
               <CardContent className="space-y-4">
                 {isEditing ? (
                   <>
-                    <div>
-                      <Label htmlFor="title">Title</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="title" className="text-base font-medium">Product Title *</Label>
                       <Input
                         id="title"
                         value={editForm.title}
                         onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                        placeholder="Product title"
+                        placeholder="e.g., Vintage Leather Jacket - Size Medium"
+                        className="h-11"
                       />
                     </div>
                     
-                    <div>
-                      <Label htmlFor="description">Description</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="description" className="text-base font-medium">Description *</Label>
                       <Textarea
                         id="description"
                         value={editForm.description}
                         onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                        placeholder="Product description"
-                        rows={4}
+                        placeholder="Describe your product in detail..."
+                        rows={5}
+                        className="resize-none"
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="price">Price ($)</Label>
-                        <Input
-                          id="price"
-                          type="number"
-                          step="0.01"
-                          value={editForm.price}
-                          onChange={(e) => setEditForm({ ...editForm, price: parseFloat(e.target.value) || 0 })}
-                        />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="category" className="text-base font-medium">Category *</Label>
+                        <Select
+                          value={editForm.category_id}
+                          onValueChange={(value) => setEditForm({ ...editForm, category_id: value })}
+                        >
+                          <SelectTrigger id="category" className="h-11">
+                            <SelectValue placeholder="Select a category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CATEGORIES.map((cat) => (
+                              <SelectItem key={cat.value} value={cat.value}>
+                                {cat.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <div>
-                        <Label htmlFor="quantity">Quantity</Label>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="condition" className="text-base font-medium">Condition *</Label>
+                        <Select
+                          value={editForm.condition_id}
+                          onValueChange={(value) => setEditForm({ ...editForm, condition_id: value })}
+                        >
+                          <SelectTrigger id="condition" className="h-11">
+                            <SelectValue placeholder="Select condition" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CONDITIONS.map((cond) => (
+                              <SelectItem key={cond.value} value={cond.value}>
+                                {cond.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="price" className="text-base font-medium">Price *</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                          <Input
+                            id="price"
+                            type="number"
+                            step="0.01"
+                            value={editForm.price}
+                            onChange={(e) => setEditForm({ ...editForm, price: parseFloat(e.target.value) || 0 })}
+                            className="h-11 pl-8"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="quantity" className="text-base font-medium">Quantity *</Label>
                         <Input
                           id="quantity"
                           type="number"
                           value={editForm.quantity}
                           onChange={(e) => setEditForm({ ...editForm, quantity: parseInt(e.target.value) || 0 })}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="category_id">Category ID</Label>
-                        <Input
-                          id="category_id"
-                          value={editForm.category_id}
-                          onChange={(e) => setEditForm({ ...editForm, category_id: e.target.value })}
-                          placeholder="Optional"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="condition_id">Condition ID</Label>
-                        <Input
-                          id="condition_id"
-                          value={editForm.condition_id}
-                          onChange={(e) => setEditForm({ ...editForm, condition_id: e.target.value })}
-                          placeholder="Optional"
+                          className="h-11"
                         />
                       </div>
                     </div>
@@ -390,13 +515,13 @@ export default function ListingDetailPage() {
                       {listing.category_id && (
                         <div>
                           <h3 className="text-sm text-muted-foreground mb-1">Category</h3>
-                          <p className="font-medium">{listing.category_id}</p>
+                          <p className="font-medium">{CATEGORIES.find(c => c.value === listing.category_id)?.label || listing.category_id}</p>
                         </div>
                       )}
                       {listing.condition_id && (
                         <div>
                           <h3 className="text-sm text-muted-foreground mb-1">Condition</h3>
-                          <p className="font-medium">{listing.condition_id}</p>
+                          <p className="font-medium">{CONDITIONS.find(c => c.value === listing.condition_id)?.label || listing.condition_id}</p>
                         </div>
                       )}
                     </div>
@@ -413,19 +538,23 @@ export default function ListingDetailPage() {
                     <ImageIcon className="h-5 w-5" />
                     Uploaded Images
                   </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => document.getElementById('image-upload')?.click()}
-                    disabled={uploadingImages}
-                  >
-                    {uploadingImages ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Upload className="h-4 w-4 mr-2" />
-                    )}
-                    Add Images
-                  </Button>
+                  <label htmlFor="image-upload">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={uploadingImages}
+                      asChild
+                    >
+                      <span className="cursor-pointer">
+                        {uploadingImages ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4 mr-2" />
+                        )}
+                        Add Images
+                      </span>
+                    </Button>
+                  </label>
                   <input
                     id="image-upload"
                     type="file"
@@ -471,74 +600,159 @@ export default function ListingDetailPage() {
               </CardContent>
             </Card>
 
-            {/* UGC Settings */}
+            {/* AI Generation Settings */}
             <Card>
               <CardHeader>
-                <CardTitle>AI Generation Settings</CardTitle>
-                <CardDescription>Settings used for media generation</CardDescription>
+                <CardTitle>AI Media Generation</CardTitle>
+                <CardDescription>{isEditing ? 'Optionally enable AI-generated images and videos for your listing' : 'Settings used for media generation'}</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
                 {isEditing ? (
                   <>
-                    <div>
-                      <Label htmlFor="product_photo_url">Product Photo URL</Label>
-                      <Input
-                        id="product_photo_url"
-                        value={editForm.product_photo_url}
-                        onChange={(e) => setEditForm({ ...editForm, product_photo_url: e.target.value })}
-                        placeholder="https://example.com/image.jpg"
-                      />
+                    {/* Image Generation Toggle */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="enable-image" className="text-base font-medium flex items-center gap-2 cursor-pointer">
+                            <ImageIcon className="h-4 w-4 text-primary" />
+                            Generate Image
+                          </Label>
+                        </div>
+                        <Switch
+                          id="enable-image"
+                          checked={enableImageGeneration}
+                          onCheckedChange={(checked) => {
+                            setEnableImageGeneration(checked)
+                            if (!checked) {
+                              setEditForm({ ...editForm, target_audience: '', product_features: '' })
+                            }
+                          }}
+                        />
+                      </div>
+                      {enableImageGeneration && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <div className="space-y-2">
+                            <Label htmlFor="avatar-upload-edit" className="text-sm font-medium flex items-center gap-2">
+                              <User className="h-4 w-4" />
+                              Avatar/Model Photo (Optional)
+                            </Label>
+                            <p className="text-xs text-muted-foreground mb-2">
+                              Upload a photo of the person/model you want to feature in your UGC content
+                            </p>
+                            {!avatarPhoto && !avatarPhotoPreview ? (
+                              <label htmlFor="avatar-upload-edit" className="cursor-pointer">
+                                <div className="border-2 border-dashed border-border rounded-lg p-4 hover:border-primary/50 transition-colors">
+                                  <div className="flex flex-col items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                                      <Upload className="h-5 w-5 text-primary" />
+                                    </div>
+                                    <div className="text-center">
+                                      <span className="text-primary hover:underline font-medium text-sm">
+                                        Click to upload avatar photo
+                                      </span>
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        PNG, JPG, or WebP (max 10MB)
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <input
+                                  id="avatar-upload-edit"
+                                  type="file"
+                                  accept="image/jpeg, image/jpg, image/png, image/webp"
+                                  onChange={handleAvatarUpload}
+                                  className="hidden"
+                                />
+                              </label>
+                            ) : (
+                              <div className="relative border rounded-lg overflow-hidden">
+                                <img
+                                  src={avatarPhotoPreview}
+                                  alt="Avatar preview"
+                                  className="w-full h-48 object-cover"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={removeAvatarPhoto}
+                                  className="absolute top-2 right-2 h-8 w-8 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:bg-destructive/90 transition-colors"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-sm p-2 truncate">
+                                  {avatarPhoto?.name || 'Avatar photo'}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="target_audience" className="text-sm font-medium">
+                              Target Audience (ICP)
+                            </Label>
+                            <Input
+                              id="target_audience"
+                              value={editForm.target_audience}
+                              onChange={(e) => setEditForm({ ...editForm, target_audience: e.target.value })}
+                              placeholder="e.g., Young male athlete"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="product_features" className="text-sm font-medium">
+                              Product Features
+                            </Label>
+                            <Textarea
+                              id="product_features"
+                              value={editForm.product_features}
+                              onChange={(e) => setEditForm({ ...editForm, product_features: e.target.value })}
+                              placeholder="e.g., Keeps drinks cold for 24 hours"
+                              rows={3}
+                              className="resize-none"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    
-                    <div>
-                      <Label htmlFor="target_audience">Target Audience</Label>
-                      <Textarea
-                        id="target_audience"
-                        value={editForm.target_audience}
-                        onChange={(e) => setEditForm({ ...editForm, target_audience: e.target.value })}
-                        placeholder="Describe your ideal customer profile"
-                        rows={2}
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="product_features">Product Features</Label>
-                      <Textarea
-                        id="product_features"
-                        value={editForm.product_features}
-                        onChange={(e) => setEditForm({ ...editForm, product_features: e.target.value })}
-                        placeholder="List key product features"
-                        rows={2}
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="video_setting">Video Setting</Label>
-                      <Input
-                        id="video_setting"
-                        value={editForm.video_setting}
-                        onChange={(e) => setEditForm({ ...editForm, video_setting: e.target.value })}
-                        placeholder="e.g., Modern kitchen, outdoor scene"
-                      />
+
+                    {/* Video Generation Toggle */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="enable-video" className="text-base font-medium flex items-center gap-2 cursor-pointer">
+                            <Video className="h-4 w-4 text-primary" />
+                            Generate Video
+                          </Label>
+                        </div>
+                        <Switch
+                          id="enable-video"
+                          checked={enableVideoGeneration}
+                          onCheckedChange={(checked) => {
+                            setEnableVideoGeneration(checked)
+                            if (!checked) {
+                              setEditForm({ ...editForm, video_setting: '' })
+                            }
+                          }}
+                        />
+                      </div>
+                      {enableVideoGeneration && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <div className="space-y-2">
+                            <Label htmlFor="video_setting" className="text-sm font-medium">
+                              Video Setting *
+                            </Label>
+                            <Textarea
+                              id="video_setting"
+                              value={editForm.video_setting}
+                              onChange={(e) => setEditForm({ ...editForm, video_setting: e.target.value })}
+                              placeholder="e.g., A cyclist with water bottle in outdoor setting"
+                              rows={4}
+                              className="resize-none"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </>
                 ) : (
                   <>
-                    {listing.product_photo_url && (
-                      <div>
-                        <h3 className="font-semibold mb-1">Product Photo URL</h3>
-                        <a 
-                          href={listing.product_photo_url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline flex items-center gap-1"
-                        >
-                          {listing.product_photo_url}
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      </div>
-                    )}
-                    
                     {listing.target_audience && (
                       <div>
                         <h3 className="font-semibold mb-1">Target Audience</h3>
