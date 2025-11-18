@@ -9,7 +9,7 @@ from .listing_schemas import ListingCreate, ListingUpdate, ListingResponse
 from services.n8n_client import N8nClient
 from services.gcs_service import gcs_service
 from services.ebay_client import ebay_client
-
+import json
 router = APIRouter(prefix="/listings", tags=["listings"])
 n8n_client = N8nClient()
 
@@ -94,6 +94,12 @@ async def create_listing(
                 description=new_listing.description,
                 category_id=new_listing.category_id
             )
+            print("UGC Response in listings.py", ugc_response)
+            print(type(ugc_response))
+            print(ugc_response[0])
+            ugc_response = ugc_response[0]
+            print(ugc_response)
+            print(type(ugc_response))
             
             # Parse n8n response
             # N8N returns direct JSON object: {"sku": "...", "title": "...", "image_urls": [...], ...}

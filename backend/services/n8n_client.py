@@ -190,5 +190,6 @@ class N8nClient:
                 json=payload,
                 timeout=180.0  # Generous timeout for both image and video generation
             )
+            print("Got response from n8n UGC generation workflow", response.json())
             response.raise_for_status()
             return response.json()

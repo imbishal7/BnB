@@ -7,7 +7,7 @@ export interface ListingInformation {
   description: string;
   condition: string;
   conditionLabel: string; // e.g., "Excellent - Used"
-  
+  enrichedDescription: string;
   // Pricing
   price: number;
   listPrice?: number; // Optional original/list price for showing discounts
@@ -130,18 +130,47 @@ export function transformApiDataToListingInfo(apiData: any): ListingInformation 
   // Map API response to ListingInformation
   // If API doesn't provide certain fields, use defaults from defaultListingInformation
   
+  const parseNumber = (value: number | string | undefined, fallback: number) => {
+    if (typeof value === 'number') return value
+    if (typeof value === 'string') {
+      const parsed = parseFloat(value)
+      return isNaN(parsed) ? fallback : parsed
+    }
+    return fallback
+  }
+
+  const imageSources =
+    apiData.media?.image_urls ||
+    apiData.image_urls ||
+    apiData.images ||
+    defaultListingInformation.images
+
+  const videoSource =
+    apiData.media?.video_url ||
+    apiData.video_url ||
+    defaultListingInformation.videoUrl
+
+  const conditionId = apiData.condition_id || apiData.condition || defaultListingInformation.condition
+  const derivedConditionLabel =
+    apiData.condition_label ||
+    getConditionLabel(apiData.condition_id) ||
+    (typeof apiData.condition === 'string' ? apiData.condition : null) ||
+    defaultListingInformation.conditionLabel
+
   return {
     title: apiData.title || defaultListingInformation.title,
     description: apiData.description || apiData.enriched_description || defaultListingInformation.description,
-    condition: apiData.condition_id || apiData.condition || defaultListingInformation.condition,
-    conditionLabel: apiData.condition_label || getConditionLabel(apiData.condition_id || apiData.condition) || defaultListingInformation.conditionLabel,
-    price: apiData.price || defaultListingInformation.price,
+    condition: conditionId,
+    conditionLabel: derivedConditionLabel,
+    price: parseNumber(apiData.price, defaultListingInformation.price),
     listPrice: apiData.list_price || apiData.original_price || defaultListingInformation.listPrice,
     currency: apiData.currency || defaultListingInformation.currency,
-    quantity: apiData.quantity || defaultListingInformation.quantity,
-    availableQuantity: apiData.available_quantity || apiData.quantity || defaultListingInformation.availableQuantity,
-    images: apiData.image_urls || apiData.images || defaultListingInformation.images,
-    videoUrl: apiData.video_url || defaultListingInformation.videoUrl,
+    quantity: parseNumber(apiData.quantity, defaultListingInformation.quantity),
+    availableQuantity:
+      parseNumber(apiData.available_quantity, NaN) ||
+      parseNumber(apiData.quantity, defaultListingInformation.availableQuantity),
+    images: imageSources,
+    videoUrl: videoSource,
     shipping: {
       cost: apiData.shipping_cost !== undefined ? apiData.shipping_cost : defaultListingInformation.shipping.cost,
       method: apiData.shipping_method || apiData.shipping?.method || defaultListingInformation.shipping.method,

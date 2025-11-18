@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -8,12 +8,12 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ChevronLeft, ChevronRight, Share2, Heart, Loader2 } from 'lucide-react'
 import { getListing } from '@/lib/api'
-import { ListingInformation, defaultListingInformation } from './information'
-import { transformApiDataToListingInfo } from './information'
-
+import { ListingInformation, defaultListingInformation, transformApiDataToListingInfo } from './information'
+import { useListingContext } from '../layout'
 export default function ItemPage() {
   const params = useParams()
   const listingId = params.id as string
+  const { selectedImageIndices, listingData, setListingData } = useListingContext()
   const [selectedImage, setSelectedImage] = useState(0)
   const [quantity, setQuantity] = useState(1)
   const [listingInfo, setListingInfo] = useState<ListingInformation>(defaultListingInformation)
@@ -21,6 +21,17 @@ export default function ItemPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    console.log("LISTING DATA",listingData);
+    // Prioritize context data - use it if available
+    if (listingData) {
+      const transformedData = transformApiDataToListingInfo(listingData)
+      setListingInfo(transformedData)
+      setLoading(false)
+      setError(null)
+      return
+    }
+
+    // Only fetch from API if context doesn't have data (e.g., direct navigation to preview)
     const fetchListingData = async () => {
       if (!listingId) {
         setLoading(false)
@@ -31,21 +42,42 @@ export default function ItemPage() {
         setLoading(true)
         setError(null)
         const apiData = await getListing(listingId)
+        console.log("API DATA",apiData);
         const transformedData = transformApiDataToListingInfo(apiData)
+        console.log("TRANSFORMED DATA",transformedData);
         setListingInfo(transformedData)
+        // Store in context for future use
+        setListingData(apiData)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load listing')
-        // Fall back to default data on error
-        setListingInfo(defaultListingInformation)
+        // Don't set dummy data, just show error state
+        setListingData(null)
       } finally {
         setLoading(false)
       }
     }
 
     fetchListingData()
-  }, [listingId])
+  }, [listingId, listingData, setListingData])
 
-  const images = listingInfo.images
+  // Filter images based on selected indices from context
+  const allImages = listingInfo.images && listingInfo.images.length > 0 ? listingInfo.images : defaultListingInformation.images
+  const images = useMemo(() => {
+    // If context has selected indices, filter images to only show selected ones
+    // selectedImageIndices contains the original indices from the full array
+    if (selectedImageIndices && selectedImageIndices.size > 0) {
+      return allImages.filter((_, index) => selectedImageIndices.has(index))
+    }
+    // Otherwise, show all images (fallback for direct navigation)
+    return allImages
+  }, [allImages, selectedImageIndices])
+
+  // Reset selectedImage if it's out of bounds after filtering
+  useEffect(() => {
+    if (selectedImage >= images.length && images.length > 0) {
+      setSelectedImage(0)
+    }
+  }, [images.length, selectedImage])
 
   const handlePrevImage = () => {
     setSelectedImage((prev) => (prev === 0 ? images.length - 1 : prev - 1))
@@ -163,19 +195,8 @@ export default function ItemPage() {
               <div className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="text-sm font-medium">Quantity</label>
-                    <Select value={quantity.toString()} onValueChange={(val) => setQuantity(Number(val))}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {quantityOptions.map((num) => (
-                          <SelectItem key={num} value={num.toString()}>
-                            {num}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <label className="text-sm font-medium">Quantity:</label>
+                    {listingInfo.quantity}
                   </div>
                 </div>
 
@@ -246,27 +267,12 @@ export default function ItemPage() {
           <Card className="p-6">
             <h2 className="mb-4 text-2xl font-bold">Item Description</h2>
             <div className="space-y-4 text-muted-foreground">
-              <p>{listingInfo.description}</p>
-              {listingInfo.whatsIncluded && listingInfo.whatsIncluded.length > 0 && (
-                <div>
-                  <h3 className="mb-2 font-semibold text-foreground">What's Included:</h3>
-                  <ul className="list-inside list-disc space-y-1">
-                    {listingInfo.whatsIncluded.map((item, idx) => (
-                      <li key={idx}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {listingInfo.conditionNotes && listingInfo.conditionNotes.length > 0 && (
-                <div>
-                  <h3 className="mb-2 font-semibold text-foreground">Condition Notes:</h3>
-                  <ul className="list-inside list-disc space-y-1">
-                    {listingInfo.conditionNotes.map((note, idx) => (
-                      <li key={idx}>{note}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <div
+                className="prose prose-sm max-w-none dark:prose-invert"
+              >
+                <div dangerouslySetInnerHTML={{ __html: listingData?.enriched_description || '' }} />
+              </div>
+              
             </div>
           </Card>
         </div>

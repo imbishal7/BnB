@@ -3,24 +3,85 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { approveMedia, generateMedia, getListing, publishToEbay } from "@/lib/api";
+import { approveMedia, generateMedia, getListing, publishToEbay, type ListingResponse } from "@/lib/api";
 import { CheckCircle2, RefreshCw, Image as ImageIcon, Video, ArrowLeft, Loader2, Check, Download, ShoppingCart } from "lucide-react";
 import '@/app/assets/hero_background.css';
+import { useListingContext } from "../layout";
+interface ListingMedia {
+  image_urls?: string[];
+  video_url?: string;
+}
+
 interface ListingData {
-  id: string;
+  id?: string;
+  sku: string;
   title: string;
   description: string;
-  status: string;
-  media?: {
-    image_urls?: string[];
-    video_url?: string;
+  price: string;
+  quantity: number;
+  category_id: string;
+  condition: string;
+  brand?: string;
+  mpn?: string;
+  media?: ListingMedia;
+  aspects?: {
+    [key: string]: string[];
   };
 }
+
+export const dummyData: ListingData = {
+  id: "dummy-listing-id",
+  sku: "OWALA-WATER-BOTTLE-385912",
+  title: "Owala FreeSip Insulated Stainless Steel Water Bottle Leak-Proof BPA-Free NEW",
+  description: "<p><strong>Stay hydrated in style with the innovative Owala FreeSip Insulated Stainless Steel Water Bottle!</strong></p><p>Designed for ultimate convenience, this bottle features a patented dual-function spout that lets you choose how you drink. Sip upright through the built-in straw or tilt it back to swig from the wide-mouth opening. The triple-layer insulation ensures your beverages stay cold for hours, while the 100% leak-proof lid gives you peace of mind on the go.</p><h3>Key Features:</h3><ul><li><strong>Triple-Layer Insulation:</strong> Keeps your drinks refreshingly cold for hours, perfect for the gym, office, or outdoors.</li><li><strong>Patented FreeSip Spout:</strong> The unique 2-in-1 design lets you sip through the integrated straw or swig from the larger opening.</li><li><strong>Completely Leak-Proof:</strong> A secure lid and locking carry loop prevent accidental spills in your bag or car.</li><li><strong>Safe & Healthy:</strong> Made from high-quality, BPA, lead, and phthalate-free materials for pure-tasting water.</li><li><strong>Easy to Clean:</strong> Features a wide opening for easy cleaning and adding ice. The lid is dishwasher-safe.</li><li><strong>Convenient Carry Loop:</strong> The integrated loop makes it easy to carry and doubles as a secure lock.</li></ul><p><strong>Condition:</strong> NEW. This item is brand new, unused, and in its original packaging, ready to be your favorite hydration companion.</p>",
+  price: "40.0",
+  quantity: 49,
+  category_id: "180969",
+  condition: "NEW",
+  brand: "Owala",
+  mpn: "123123",
+  media: {
+    image_urls: [
+      "https://images.unsplash.com/photo-1761864293806-51e7500c08e6?q=80&w=2080&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDF8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+      "https://images.unsplash.com/photo-1761864293806-51e7500c08e6?q=80&w=2080&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDF8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+      "https://images.unsplash.com/photo-1762088776943-28a9fbadcec4?q=80&w=1287&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+      "https://images.unsplash.com/photo-1762088776943-28a9fbadcec4?q=80&w=1287&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+      "https://images.unsplash.com/photo-1762088776943-28a9fbadcec4?q=80&w=1287&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+    ],
+    video_url: "https://storage.googleapis.com/prodcut_assets/761f9d9efac2f282d97801e6e21557d2_1763242585.mp4",
+  },
+  aspects: {
+    "Brand": [
+      "Owala"
+    ],
+    "MPN": [
+      "123123"
+    ],
+    "Type": [
+      "Water Bottle"
+    ],
+    "Color": [
+      "Multicolor"
+    ],
+    "Material": [
+      "Stainless Steel"
+    ],
+    "Features": [
+      "Insulated",
+      "Leak-Proof",
+      "BPA-Free",
+      "With Straw",
+      "Dishwasher Safe Lid",
+      "Carry Loop"
+    ]
+  }
+};
 
 export default function MediaReviewPage() {
   const router = useRouter();
   const params = useParams();
   const listingId = params.id as string;
+  const { selectedImageIndices, setSelectedImageIndices, setListingData } = useListingContext();
 
   const [listing, setListing] = useState<ListingData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,11 +104,15 @@ export default function MediaReviewPage() {
       setLoading(true);
       setError(null);
       const data = await getListing(listingId);
-      setListing(data as ListingData);
+      console.log("DATA From listing",data);
+      // const data = dummyData;
+      setListing(data as unknown as ListingData);
+      setListingData(data as ListingResponse);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load listing"
       );
+      setListingData(null);
     } finally {
       setLoading(false);
     }
@@ -57,9 +122,11 @@ export default function MediaReviewPage() {
     try {
       setIsApproving(true);
       setError(null);
-      const selectedImageIndices = Array.from(selectedImages);
-      await approveMedia(listingId, selectedImageIndices);
-      router.push(`/listings/${listingId}/publish`);
+      const selectedImageIndicesArray = Array.from(selectedImages);
+      // Ensure context is updated with final selection before navigation
+      setSelectedImageIndices(selectedImages.size > 0 ? selectedImages : null);
+      // await approveMedia(listingId, selectedImageIndicesArray);
+      router.push(`/listings/${listingId}/preview`);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to approve media"
@@ -97,7 +164,9 @@ export default function MediaReviewPage() {
       setError(null);
       await generateMedia(listingId, 'images');
       // Clear selections when regenerating
-      setSelectedImages(new Set());
+      const emptySet = new Set<number>();
+      setSelectedImages(emptySet);
+      setSelectedImageIndices(null);
       // Refetch listing to get new media
       await fetchListing();
     } catch (err) {

@@ -1,0 +1,30 @@
+/* .description-content h1,
+.description-content h2,
+.description-content h3 {
+  @apply font-bold text-foreground mb-4 mt-6;
+}
+
+.description-content p {
+  @apply text-muted-foreground leading-relaxed mb-4;
+}
+
+.description-content ul,
+.description-content ol {
+  @apply list-disc pl-6 mb-4;
+}
+
+.description-content li {
+  @apply mb-2;
+}
+
+.description-content strong {
+  @apply font-semibold text-foreground;
+}
+
+.description-content a {
+  @apply text-primary underline hover:text-primary/80;
+}
+
+.description-content img {
+  @apply rounded-lg my-4 max-w-full;
+} */
