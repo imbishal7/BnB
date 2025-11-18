@@ -19,22 +19,6 @@ import { Switch } from "@/components/ui/switch";
 import '@/app/assets/hero_background.css'
 
 
-const CONDITIONS = [
-  { value: "1000", label: "New" },
-  { value: "1500", label: "New other (see details)" },
-  { value: "1750", label: "New with defects" },
-  { value: "2000", label: "Certified - Refurbished" },
-  { value: "2500", label: "Excellent - Refurbished" },
-  { value: "3000", label: "Very Good - Refurbished" },
-  { value: "4000", label: "Good - Refurbished" },
-  { value: "5000", label: "Seller Refurbished" },
-  { value: "6000", label: "Used" },
-  { value: "7000", label: "Very Good" },
-  { value: "8000", label: "Good" },
-  { value: "9000", label: "Acceptable" },
-  { value: "10000", label: "For parts or not working" },
-];
-
 const CATEGORIES = [
   { value: "1", label: "Antiques" },
   { value: "2", label: "Art" },
@@ -90,7 +74,9 @@ export default function NewListingPage() {
     category: "",
     price: "",
     quantity: "",
-    condition: "",
+    condition: "NEW",
+    brand: "",
+    mpn: "",
     target_audience: "",
     product_features: "",
     video_setting: "",
@@ -225,7 +211,7 @@ export default function NewListingPage() {
       return false;
     }
     if (!formData.condition) {
-      setError("Condition is required");
+      setError("Item condition is required");
       return false;
     }
     if (uploadedImages.length === 0) {
@@ -275,7 +261,9 @@ export default function NewListingPage() {
         category_id: string;
         price: number;
         quantity: number;
-        condition_id: string;
+        condition: string;
+        brand?: string;
+        mpn?: string;
         uploaded_image_urls?: string[];
         product_photo_url?: string;
         model_avatar_url?: string;
@@ -290,7 +278,9 @@ export default function NewListingPage() {
         category_id: formData.category,
         price: parseFloat(formData.price),
         quantity: parseInt(formData.quantity),
-        condition_id: formData.condition,
+        condition: formData.condition,
+        brand: formData.brand.trim() || "",  // Send empty string instead of undefined
+        mpn: formData.mpn.trim() || "",      // Send empty string instead of undefined
         generate_image: enableImageGeneration,
         generate_video: enableVideoGeneration,
       };
@@ -402,12 +392,12 @@ export default function NewListingPage() {
             </div>
           </div>
 
-          {/* Category & Condition Section */}
+          {/* Product Details Section */}
           <div className="rounded-xl border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
             <div className="mb-6 space-y-1">
               <h2 className="text-xl font-semibold">Product Details</h2>
               <p className="text-sm text-muted-foreground">
-                Select the appropriate category and condition for your listing
+                Select the category, condition, and brand information for your listing
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -434,7 +424,7 @@ export default function NewListingPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="condition" className="text-base font-medium">
-                  Condition *
+                  Item Condition *
                 </Label>
                 <Select
                   value={formData.condition}
@@ -444,13 +434,50 @@ export default function NewListingPage() {
                     <SelectValue placeholder="Select condition" />
                   </SelectTrigger>
                   <SelectContent>
-                    {CONDITIONS.map((cond) => (
-                      <SelectItem key={cond.value} value={cond.value}>
-                        {cond.label}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="NEW">New</SelectItem>
+                    <SelectItem value="USED">Used</SelectItem>
+                    <SelectItem value="REFURBISHED">Refurbished</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  General condition of the item
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="brand" className="text-base font-medium">
+                  Brand
+                </Label>
+                <Input
+                  id="brand"
+                  name="brand"
+                  type="text"
+                  value={formData.brand}
+                  onChange={handleChange}
+                  placeholder="e.g., Dell, Apple, or Generic"
+                  className="h-11"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use "Generic" if no specific brand
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="mpn" className="text-base font-medium">
+                  MPN (Manufacturer Part Number)
+                </Label>
+                <Input
+                  id="mpn"
+                  name="mpn"
+                  type="text"
+                  value={formData.mpn}
+                  onChange={handleChange}
+                  placeholder='e.g., Model-123 or "Does Not Apply"'
+                  className="h-11"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use "Does Not Apply" if no MPN exists
+                </p>
               </div>
             </div>
           </div>

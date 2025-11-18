@@ -5,11 +5,33 @@ from typing import Optional, List
 class MediaCompleteWebhook(BaseModel):
     """Schema for media generation completion webhook from n8n UGC workflow."""
     listing_id: Optional[str] = None
-    status: str
+    status: str = "success"
+    
+    # Enhanced product information from n8n
+    sku: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None  # Enhanced HTML description
+    price: Optional[str] = None
+    quantity: Optional[int] = None
+    category_id: Optional[str] = None
+    condition: Optional[str] = None
+    brand: Optional[str] = None
+    mpn: Optional[str] = None
+    
+    # Generated media
+    image_urls: Optional[List[str]] = None  # Multiple generated images
+    video_url: Optional[str] = None
+    
+    # eBay aspects (product attributes)
+    aspects: Optional[dict] = None
+    
+    # Legacy fields for backward compatibility
     product: Optional[str] = None
     model: Optional[str] = None
-    assets: Optional[dict] = None  # {"image_url": "...", "video_url": "..."}
-    prompts: Optional[dict] = None  # {"image_prompt": "...", "video_prompt": "..."}
+    assets: Optional[dict] = None
+    prompts: Optional[dict] = None
+    
+    # Error handling
     error_message: Optional[str] = None
     
     @property
@@ -17,12 +39,14 @@ class MediaCompleteWebhook(BaseModel):
         return self.status == "success"
     
     @property
-    def image_url(self) -> Optional[str]:
-        return self.assets.get("image_url") if self.assets else None
+    def has_media(self) -> bool:
+        """Check if webhook contains generated media."""
+        return bool(self.image_urls or self.video_url)
     
     @property
-    def video_url(self) -> Optional[str]:
-        return self.assets.get("video_url") if self.assets else None
+    def has_enhanced_data(self) -> bool:
+        """Check if webhook contains enhanced product data."""
+        return bool(self.description or self.aspects)
 
 
 class EbayPublishWebhook(BaseModel):

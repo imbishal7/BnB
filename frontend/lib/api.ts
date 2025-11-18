@@ -174,6 +174,12 @@ export async function generateMedia(id: string | number, mediaType?: 'images' | 
   });
 }
 
+export async function publishToEbay(id: string | number): Promise<ListingResponse> {
+  return apiRequest<ListingResponse>(`/listings/${id}/publish-to-ebay`, {
+    method: 'POST',
+  });
+}
+
 export async function updateListing(id: string | number, data: Partial<CreateListingRequest>): Promise<ListingResponse> {
   return apiRequest<ListingResponse>(`/listings/${id}`, {
     method: 'PATCH',
@@ -195,6 +201,7 @@ export async function uploadImages(files: File[]): Promise<UploadResponse> {
   files.forEach((file) => {
     formData.append('files', file);
   });
+  console.log(formData);
 
   const response = await fetch(`${API_BASE_URL}/upload/images`, {
     method: 'POST',

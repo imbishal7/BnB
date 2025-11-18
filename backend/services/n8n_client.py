@@ -118,7 +118,14 @@ class N8nClient:
         generate_video: bool = True,
         image_prompt: Optional[str] = None,
         video_prompt: Optional[str] = None,
-        model_avatar_url: Optional[str] = None
+        model_avatar_url: Optional[str] = None,
+        brand: Optional[str] = None,
+        mpn: Optional[str] = None,
+        condition: Optional[str] = None,
+        price: Optional[float] = None,
+        quantity: Optional[int] = None,
+        description: Optional[str] = None,
+        category_id: Optional[str] = None
     ) -> dict:
         """
         Trigger unified n8n UGC generation workflow.
@@ -126,7 +133,7 @@ class N8nClient:
         Args:
             listing_id: ID of the listing
             product_name: Name of the product
-            product_photo_url: URL of the product photo
+            product_photo_url: URL of the product photo (first uploaded image)
             target_audience: Target ICP (ideal customer profile)
             product_features: Key features of the product
             video_setting: Setting/scene description
@@ -135,6 +142,13 @@ class N8nClient:
             image_prompt: Optional custom image prompt
             video_prompt: Optional custom video prompt
             model_avatar_url: Optional avatar/model photo URL
+            brand: Product brand
+            mpn: Manufacturer Part Number
+            condition: Item condition (NEW, USED, REFURBISHED)
+            price: Product price
+            quantity: Available quantity
+            description: Product description
+            category_id: Product category
             
         Returns:
             Response from n8n webhook
@@ -142,14 +156,23 @@ class N8nClient:
         payload = {
             "listing_id": listing_id,
             "Product": product_name,
-            "Product Photo": product_photo_url,
+            "Product Photo": product_photo_url,  # Single main product photo
             "ICP": target_audience,
             "Product Features": product_features,
             "Video Setting": video_setting,
             "is_picture": generate_image,
             "is_video": generate_video,
             "is_avatar": bool(model_avatar_url),
-            "callback_url": f"{self.backend_url}/webhooks/media-complete"
+            "callback_url": f"{self.backend_url}/webhooks/media-complete",
+            
+            # Product information (always include with defaults if empty)
+            "Brand": brand or "Generic",
+            "MPN": mpn or "Does Not Apply",
+            "Condition": condition or "NEW",
+            "Price": str(price) if price is not None else "0.00",
+            "Quantity": quantity if quantity is not None else 0,
+            "Description": description or "",
+            "Category": category_id or ""
         }
         
         if model_avatar_url:

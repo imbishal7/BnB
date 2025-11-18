@@ -3,8 +3,8 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { approveMedia, generateMedia, getListing } from "@/lib/api";
-import { CheckCircle2, RefreshCw, Image as ImageIcon, Video, ArrowLeft, Loader2, Check, Download } from "lucide-react";
+import { approveMedia, generateMedia, getListing, publishToEbay } from "@/lib/api";
+import { CheckCircle2, RefreshCw, Image as ImageIcon, Video, ArrowLeft, Loader2, Check, Download, ShoppingCart } from "lucide-react";
 import '@/app/assets/hero_background.css';
 interface ListingData {
   id: string;
@@ -29,6 +29,8 @@ export default function MediaReviewPage() {
   const [isRegeneratingImages, setIsRegeneratingImages] = useState(false);
   const [isRegeneratingVideo, setIsRegeneratingVideo] = useState(false);
   const [selectedImages, setSelectedImages] = useState<Set<number>>(new Set());
+  const [isPublishingToEbay, setIsPublishingToEbay] = useState(false);
+  const [publishSuccess, setPublishSuccess] = useState(false);
 
   useEffect(() => {
     if (listingId) {
@@ -120,6 +122,24 @@ export default function MediaReviewPage() {
       );
     } finally {
       setIsRegeneratingVideo(false);
+    }
+  };
+
+  const handlePublishToEbay = async () => {
+    try {
+      setIsPublishingToEbay(true);
+      setError(null);
+      setPublishSuccess(false);
+      await publishToEbay(listingId);
+      setPublishSuccess(true);
+      // Refetch to get updated status
+      await fetchListing();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to publish to eBay"
+      );
+    } finally {
+      setIsPublishingToEbay(false);
     }
   };
 
@@ -444,6 +464,36 @@ export default function MediaReviewPage() {
                       Please select at least one image to approve
                     </span>
                   )}
+            
+            {/* Publish to eBay Button */}
+            <Button
+              onClick={handlePublishToEbay}
+              disabled={isPublishingToEbay || (!hasImages && !hasVideo) || publishSuccess}
+              variant={publishSuccess ? "outline" : "default"}
+              className="h-11 text-base font-medium px-8 mt-2"
+            >
+              {isPublishingToEbay ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Publishing to eBay...
+                </>
+              ) : publishSuccess ? (
+                <>
+                  <Check className="mr-2 h-4 w-4" />
+                  Published to eBay!
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="mr-2 h-4 w-4" />
+                  Publish to eBay
+                </>
+              )}
+            </Button>
+            {publishSuccess && (
+              <span className="text-sm text-green-600 font-medium">
+                Successfully published to your eBay account!
+              </span>
+            )}
           </div>
         </div>
       </div>
