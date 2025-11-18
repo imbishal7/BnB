@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Sparkles, LogIn, UserPlus, LogOut, User } from 'lucide-react'
 import { isAuthenticated, logout } from '@/lib/api'
+import '@/app/assets/hero_background.css'
 
 export function Navbar() {
   const router = useRouter()
@@ -22,7 +23,8 @@ export function Navbar() {
   }
 
   return (
-    <nav className="border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+    <nav className="relative">
+<div className="hero-background min-h-screen absolute top-0 left-0 w-full h-full opacity-60 -z-10"></div>
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
@@ -37,7 +39,7 @@ export function Navbar() {
           <div className="flex items-center gap-4">
             {isAuth ? (
               <>
-                <Link href="/listings/new">
+                <Link href="/listings/new" className="hidden md:block">
                   <Button variant="ghost" size="sm">
                     Create Listing
                   </Button>
@@ -48,14 +50,14 @@ export function Navbar() {
                     Dashboard
                   </Button>
                 </Link>
-                <Button variant="ghost" size="sm" onClick={handleLogout}>
+                <Button variant="ghost" size="sm" onClick={handleLogout} className="hidden md:flex">
                   <LogOut className="h-4 w-4 mr-2" />
                   Sign Out
                 </Button>
               </>
             ) : (
               <>
-                <Link href="/auth/login">
+                <Link href="/auth/login" className="hidden md:block">
                   <Button variant="ghost" size="sm">
                     <LogIn className="h-4 w-4 mr-2" />
                     Sign In

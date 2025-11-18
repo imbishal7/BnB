@@ -6,8 +6,10 @@ import { motion } from 'motion/react'
 
 export function CTASection() {
   return (
-    <section className="py-20 bg-primary text-primary-foreground">
-      <div className="container mx-auto px-4">
+    <section className="relative ">
+      <div className="hero-background absolute top-0 left-0 w-full h-full opacity-60 z-10"></div>
+      <div className="max-w-4xl mx-auto container px-4 py-10 relative z-10 rounded-lg shadow-lg">
+      <div className='mb-10  bg-primary py-10 text-primary-foreground rounded-lg'>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -33,6 +35,7 @@ export function CTASection() {
             </Button>
           </motion.div>
         </motion.div>
+      </div>
       </div>
     </section>
   )

@@ -109,7 +109,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid gap-6 md:grid-cols-4 mb-8">
+        <div className="grid gap-6 md:grid-cols-4 grid-cols-2 mb-8">
           <Card>
             <CardHeader>
               <CardDescription>Total Listings</CardDescription>
