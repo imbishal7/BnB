@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     n8n_media_generation_webhook: str
     n8n_ebay_publish_webhook: str
     
+    # eBay API
+    ebay_client_id: str = ""
+    ebay_client_secret: str = ""
+    ebay_sandbox: str = "true"
+    
     # Backend URL
     backend_url: str = "http://localhost:8000"
     
