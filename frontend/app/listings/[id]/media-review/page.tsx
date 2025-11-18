@@ -3,85 +3,24 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { approveMedia, generateMedia, getListing, publishToEbay, type ListingResponse } from "@/lib/api";
-import { CheckCircle2, RefreshCw, Image as ImageIcon, Video, ArrowLeft, Loader2, Check, Download, ShoppingCart } from "lucide-react";
+import { approveMedia, generateMedia, getListing } from "@/lib/api";
+import { CheckCircle2, RefreshCw, Image as ImageIcon, Video, ArrowLeft, Loader2, Check, Download } from "lucide-react";
 import '@/app/assets/hero_background.css';
-import { useListingContext } from "../layout";
-interface ListingMedia {
-  image_urls?: string[];
-  video_url?: string;
-}
-
 interface ListingData {
-  id?: string;
-  sku: string;
+  id: string;
   title: string;
   description: string;
-  price: string;
-  quantity: number;
-  category_id: string;
-  condition: string;
-  brand?: string;
-  mpn?: string;
-  media?: ListingMedia;
-  aspects?: {
-    [key: string]: string[];
+  status: string;
+  media?: {
+    image_urls?: string[];
+    video_url?: string;
   };
 }
-
-export const dummyData: ListingData = {
-  id: "dummy-listing-id",
-  sku: "OWALA-WATER-BOTTLE-385912",
-  title: "Owala FreeSip Insulated Stainless Steel Water Bottle Leak-Proof BPA-Free NEW",
-  description: "<p><strong>Stay hydrated in style with the innovative Owala FreeSip Insulated Stainless Steel Water Bottle!</strong></p><p>Designed for ultimate convenience, this bottle features a patented dual-function spout that lets you choose how you drink. Sip upright through the built-in straw or tilt it back to swig from the wide-mouth opening. The triple-layer insulation ensures your beverages stay cold for hours, while the 100% leak-proof lid gives you peace of mind on the go.</p><h3>Key Features:</h3><ul><li><strong>Triple-Layer Insulation:</strong> Keeps your drinks refreshingly cold for hours, perfect for the gym, office, or outdoors.</li><li><strong>Patented FreeSip Spout:</strong> The unique 2-in-1 design lets you sip through the integrated straw or swig from the larger opening.</li><li><strong>Completely Leak-Proof:</strong> A secure lid and locking carry loop prevent accidental spills in your bag or car.</li><li><strong>Safe & Healthy:</strong> Made from high-quality, BPA, lead, and phthalate-free materials for pure-tasting water.</li><li><strong>Easy to Clean:</strong> Features a wide opening for easy cleaning and adding ice. The lid is dishwasher-safe.</li><li><strong>Convenient Carry Loop:</strong> The integrated loop makes it easy to carry and doubles as a secure lock.</li></ul><p><strong>Condition:</strong> NEW. This item is brand new, unused, and in its original packaging, ready to be your favorite hydration companion.</p>",
-  price: "40.0",
-  quantity: 49,
-  category_id: "180969",
-  condition: "NEW",
-  brand: "Owala",
-  mpn: "123123",
-  media: {
-    image_urls: [
-      "https://images.unsplash.com/photo-1761864293806-51e7500c08e6?q=80&w=2080&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDF8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-      "https://images.unsplash.com/photo-1761864293806-51e7500c08e6?q=80&w=2080&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDF8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-      "https://images.unsplash.com/photo-1762088776943-28a9fbadcec4?q=80&w=1287&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-      "https://images.unsplash.com/photo-1762088776943-28a9fbadcec4?q=80&w=1287&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-      "https://images.unsplash.com/photo-1762088776943-28a9fbadcec4?q=80&w=1287&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-    ],
-    video_url: "https://storage.googleapis.com/prodcut_assets/761f9d9efac2f282d97801e6e21557d2_1763242585.mp4",
-  },
-  aspects: {
-    "Brand": [
-      "Owala"
-    ],
-    "MPN": [
-      "123123"
-    ],
-    "Type": [
-      "Water Bottle"
-    ],
-    "Color": [
-      "Multicolor"
-    ],
-    "Material": [
-      "Stainless Steel"
-    ],
-    "Features": [
-      "Insulated",
-      "Leak-Proof",
-      "BPA-Free",
-      "With Straw",
-      "Dishwasher Safe Lid",
-      "Carry Loop"
-    ]
-  }
-};
 
 export default function MediaReviewPage() {
   const router = useRouter();
   const params = useParams();
   const listingId = params.id as string;
-  const { selectedImageIndices, setSelectedImageIndices, setListingData } = useListingContext();
 
   const [listing, setListing] = useState<ListingData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,8 +29,6 @@ export default function MediaReviewPage() {
   const [isRegeneratingImages, setIsRegeneratingImages] = useState(false);
   const [isRegeneratingVideo, setIsRegeneratingVideo] = useState(false);
   const [selectedImages, setSelectedImages] = useState<Set<number>>(new Set());
-  const [isPublishingToEbay, setIsPublishingToEbay] = useState(false);
-  const [publishSuccess, setPublishSuccess] = useState(false);
 
   useEffect(() => {
     if (listingId) {
@@ -99,20 +36,40 @@ export default function MediaReviewPage() {
     }
   }, [listingId]);
 
+  // Poll for media generation status
+  useEffect(() => {
+    if (!listing || listing.status !== "generating_media") {
+      return;
+    }
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const data = await getListing(listingId);
+        setListing(data as ListingData);
+        
+        // Stop polling when media is ready or error occurs
+        if (data.status === "media_ready" || data.status === "error") {
+          clearInterval(pollInterval);
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+        // Continue polling even on error
+      }
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [listing?.status, listingId]);
+
   const fetchListing = async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await getListing(listingId);
-      console.log("DATA From listing",data);
-      // const data = dummyData;
-      setListing(data as unknown as ListingData);
-      setListingData(data as ListingResponse);
+      setListing(data as ListingData);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load listing"
       );
-      setListingData(null);
     } finally {
       setLoading(false);
     }
@@ -122,10 +79,8 @@ export default function MediaReviewPage() {
     try {
       setIsApproving(true);
       setError(null);
-      const selectedImageIndicesArray = Array.from(selectedImages);
-      // Ensure context is updated with final selection before navigation
-      setSelectedImageIndices(selectedImages.size > 0 ? selectedImages : null);
-      // await approveMedia(listingId, selectedImageIndicesArray);
+      const selectedImageIndices = Array.from(selectedImages);
+      // await approveMedia(listingId, selectedImageIndices);
       router.push(`/listings/${listingId}/preview`);
     } catch (err) {
       setError(
@@ -164,9 +119,7 @@ export default function MediaReviewPage() {
       setError(null);
       await generateMedia(listingId, 'images');
       // Clear selections when regenerating
-      const emptySet = new Set<number>();
-      setSelectedImages(emptySet);
-      setSelectedImageIndices(null);
+      setSelectedImages(new Set());
       // Refetch listing to get new media
       await fetchListing();
     } catch (err) {
@@ -191,24 +144,6 @@ export default function MediaReviewPage() {
       );
     } finally {
       setIsRegeneratingVideo(false);
-    }
-  };
-
-  const handlePublishToEbay = async () => {
-    try {
-      setIsPublishingToEbay(true);
-      setError(null);
-      setPublishSuccess(false);
-      await publishToEbay(listingId);
-      setPublishSuccess(true);
-      // Refetch to get updated status
-      await fetchListing();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to publish to eBay"
-      );
-    } finally {
-      setIsPublishingToEbay(false);
     }
   };
 
@@ -294,6 +229,7 @@ export default function MediaReviewPage() {
 
   const hasImages = listing.media?.image_urls && listing.media.image_urls.length > 0;
   const hasVideo = listing.media?.video_url;
+  const isGenerating = listing.status === "generating_media";
 
   return (
     <div className="relative min-h-screen bg-background">
@@ -315,7 +251,42 @@ export default function MediaReviewPage() {
           </div>
         )}
 
-        {/* Media Display Section */}
+        {/* Generating Media State */}
+        {isGenerating && (
+          <Card className="rounded-xl border bg-card shadow-sm mb-6">
+            <CardContent className="pt-6">
+              <div className="flex flex-col items-center justify-center py-12 gap-6">
+                <div className="relative">
+                  <Loader2 className="h-16 w-16 animate-spin text-primary" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="h-12 w-12 rounded-full bg-primary/20 animate-pulse"></div>
+                  </div>
+                </div>
+                <div className="text-center space-y-2">
+                  <h3 className="text-xl font-semibold">Generating Your Media</h3>
+                  <p className="text-muted-foreground max-w-md">
+                    Our AI is creating amazing images and videos for your product. 
+                    This may take a few minutes. Please wait...
+                  </p>
+                  <p className="text-sm text-muted-foreground/80 mt-4">
+                    ⏱️ Estimated time: 2-5 minutes
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="flex gap-1">
+                    <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                  <span>Processing...</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Media Display Section - Only show when not generating */}
+        {!isGenerating && (
         <div className="space-y-6">
           {/* Images Section */}
           {hasImages && (
@@ -533,38 +504,9 @@ export default function MediaReviewPage() {
                       Please select at least one image to approve
                     </span>
                   )}
-            
-            {/* Publish to eBay Button */}
-            <Button
-              onClick={handlePublishToEbay}
-              disabled={isPublishingToEbay || (!hasImages && !hasVideo) || publishSuccess}
-              variant={publishSuccess ? "outline" : "default"}
-              className="h-11 text-base font-medium px-8 mt-2"
-            >
-              {isPublishingToEbay ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Publishing to eBay...
-                </>
-              ) : publishSuccess ? (
-                <>
-                  <Check className="mr-2 h-4 w-4" />
-                  Published to eBay!
-                </>
-              ) : (
-                <>
-                  <ShoppingCart className="mr-2 h-4 w-4" />
-                  Publish to eBay
-                </>
-              )}
-            </Button>
-            {publishSuccess && (
-              <span className="text-sm text-green-600 font-medium">
-                Successfully published to your eBay account!
-              </span>
-            )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );

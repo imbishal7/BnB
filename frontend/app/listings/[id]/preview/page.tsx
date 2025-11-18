@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ChevronLeft, ChevronRight, Share2, Heart, Loader2 } from 'lucide-react'
-import { getListing } from '@/lib/api'
+import { ChevronLeft, ChevronRight, Share2, Heart, Loader2, ShoppingCart, Check, ExternalLink } from 'lucide-react'
+import { getListing, publishToEbayWithScript } from '@/lib/api'
 import { ListingInformation, defaultListingInformation, transformApiDataToListingInfo } from './information'
 import { useListingContext } from '../layout'
 export default function ItemPage() {
@@ -19,6 +19,9 @@ export default function ItemPage() {
   const [listingInfo, setListingInfo] = useState<ListingInformation>(defaultListingInformation)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isPublishing, setIsPublishing] = useState(false)
+  const [publishSuccess, setPublishSuccess] = useState(false)
+  const [ebayUrl, setEbayUrl] = useState<string | null>(null)
 
   useEffect(() => {
     console.log("LISTING DATA",listingData);
@@ -104,6 +107,29 @@ export default function ItemPage() {
   const maxQuantity = Math.min(listingInfo.availableQuantity, listingInfo.quantity)
   const quantityOptions = Array.from({ length: maxQuantity }, (_, i) => i + 1)
 
+  const handlePublishToEbay = async () => {
+    try {
+      setIsPublishing(true)
+      setError(null)
+      setPublishSuccess(false)
+      
+      const result = await publishToEbayWithScript(listingId)
+      
+      if (result.success) {
+        setPublishSuccess(true)
+        setEbayUrl(result.ebay_url)
+      } else {
+        throw new Error(result.message || 'Failed to publish to eBay')
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Failed to publish to eBay'
+      )
+    } finally {
+      setIsPublishing(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -123,9 +149,64 @@ export default function ItemPage() {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
       <div className="mb-8 space-y-4">
-          <div className="flex items-center gap-3 mx-auto">
+          <div className="flex items-center justify-between">
             <h1 className="text-4xl font-bold">Preview Listing</h1>
+            
+            {/* Publish to eBay Button */}
+            {!publishSuccess ? (
+              <Button
+                onClick={handlePublishToEbay}
+                disabled={isPublishing || !listingData?.media || (!listingData.media.image_urls && !listingData.media.video_url)}
+                size="lg"
+                className="px-8"
+              >
+                {isPublishing ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Publishing to eBay...
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart className="mr-2 h-5 w-5" />
+                    Publish to eBay
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="lg"
+                className="px-8"
+                onClick={() => ebayUrl && window.open(ebayUrl, '_blank')}
+              >
+                <Check className="mr-2 h-5 w-5 text-green-600" />
+                Published!
+                <ExternalLink className="ml-2 h-4 w-4" />
+              </Button>
+            )}
           </div>
+          {publishSuccess && ebayUrl && (
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+              <p className="text-sm text-green-800 dark:text-green-200">
+                ✅ Successfully published to eBay Sandbox! 
+                <a 
+                  href={ebayUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="ml-2 underline hover:text-green-900 dark:hover:text-green-100 inline-flex items-center gap-1"
+                >
+                  View Listing <ExternalLink className="h-3 w-3" />
+                </a>
+              </p>
+            </div>
+          )}
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <p className="text-sm text-red-800 dark:text-red-200">
+                ❌ {error}
+              </p>
+            </div>
+          )}
         </div>
         <div className="grid gap-8 lg:grid-cols-2">
           {/* Image Gallery Section */}

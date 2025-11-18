@@ -180,6 +180,21 @@ export async function publishToEbay(id: string | number): Promise<ListingRespons
   });
 }
 
+export interface PublishEbayScriptResponse {
+  success: boolean;
+  listing_id?: string;
+  offer_id?: string;
+  ebay_url?: string;
+  message?: string;
+  error?: string;
+}
+
+export async function publishToEbayWithScript(id: string | number): Promise<PublishEbayScriptResponse> {
+  return apiRequest<PublishEbayScriptResponse>(`/listings/${id}/publish-with-script`, {
+    method: 'POST',
+  });
+}
+
 export async function updateListing(id: string | number, data: Partial<CreateListingRequest>): Promise<ListingResponse> {
   return apiRequest<ListingResponse>(`/listings/${id}`, {
     method: 'PATCH',

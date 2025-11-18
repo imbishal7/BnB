@@ -1,6 +1,13 @@
-from typing import List
+from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
+from datetime import datetime
+import os
+import sys
+import subprocess
+import tempfile
+import json as json_module
 
 from core.database import get_db
 from models import User, Listing, ListingStatus, Media
@@ -551,7 +558,7 @@ async def publish_to_ebay(
             listing.ebay_offer_id = result.get("offer_id")
             listing.ebay_sku = result["sku"]
             listing.status = ListingStatus.PUBLISHED
-            listing.published_at = db.func.now()
+            listing.published_at = datetime.utcnow()
             db.commit()
             
             print(f"✅ Successfully published to eBay: {listing.ebay_listing_id}")
@@ -581,3 +588,167 @@ async def publish_to_ebay(
     
     db.refresh(listing)
     return listing
+
+
+@router.post("/{listing_id}/publish-with-script")
+async def publish_with_script(
+    listing_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Publish listing to eBay using the standalone ebay.py script.
+    This endpoint creates a temporary product_config.py and runs ebay.py.
+    """
+    # Get the listing
+    listing = db.query(Listing).filter(
+        Listing.id == listing_id,
+        Listing.user_id == current_user.id
+    ).first()
+    
+    if not listing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Listing not found"
+        )
+    
+    # Check if listing has media
+    if not listing.media or (not listing.media.image_urls and not listing.media.video_url):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Listing must have at least images or video before publishing"
+        )
+    
+    # Prepare product data from listing
+    product_data = {
+        "sku": listing.enriched_sku or f"BNB-{listing.id}",
+        "title": listing.title,
+        "description": listing.enriched_description or listing.description,
+        "price": str(listing.price),
+        "quantity": listing.quantity,
+        "category_id": listing.category_id or "88433",
+        "image_urls": listing.media.image_urls or [],
+        "brand": listing.brand or "Generic",
+        "mpn": listing.mpn or "Does Not Apply",
+        "condition": listing.condition or "NEW"
+    }
+    
+    # Add video URL if available
+    if listing.media.video_url:
+        product_data["video_url"] = listing.media.video_url
+    
+    # Add aspects if available
+    if listing.ebay_aspects:
+        product_data["aspects"] = listing.ebay_aspects
+    else:
+        # Default aspects
+        product_data["aspects"] = {
+            "Brand": [product_data["brand"]],
+            "MPN": [product_data["mpn"]],
+        }
+    
+    print(f"🚀 Publishing listing {listing_id} to eBay using script...")
+    print(f"   Product data: {json_module.dumps(product_data, indent=2)}")
+    
+    # Update listing status
+    listing.status = ListingStatus.PUBLISHING
+    db.commit()
+    
+    try:
+        # Create temporary config file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, dir=os.path.dirname(__file__)) as temp_config:
+            temp_config.write(f"product_data = {json_module.dumps(product_data, indent=2)}\n")
+            temp_config_path = temp_config.name
+        
+        print(f"📝 Created temp config: {temp_config_path}")
+        
+        # Get path to ebay.py (in BnB root directory)
+        backend_dir = os.path.dirname(os.path.dirname(__file__))  # Go up from api/ to backend/
+        bnb_dir = os.path.dirname(backend_dir)  # Go up from backend/ to BnB/
+        ebay_script_path = os.path.join(bnb_dir, "ebay.py")
+        
+        if not os.path.exists(ebay_script_path):
+            raise Exception(f"ebay.py not found at {ebay_script_path}")
+        
+        print(f"📍 Using ebay.py at: {ebay_script_path}")
+        
+        # Run ebay.py with the temp config
+        result = subprocess.run(
+            [sys.executable, ebay_script_path, temp_config_path],
+            capture_output=True,
+            text=True,
+            timeout=120  # 2 minute timeout
+        )
+        
+        # Clean up temp file
+        try:
+            os.unlink(temp_config_path)
+        except Exception as e:
+            print(f"⚠️  Failed to delete temp config: {e}")
+        
+        print(f"📤 Script output:\n{result.stdout}")
+        
+        if result.returncode != 0:
+            print(f"❌ Script error:\n{result.stderr}")
+            raise Exception(f"Script failed with return code {result.returncode}: {result.stderr}")
+        
+        # Parse output to extract listing ID and URL
+        # The script prints: "Listing ID: <id>" and "View your listing: <url>"
+        listing_id_match = None
+        ebay_url = None
+        offer_id_match = None
+        
+        for line in result.stdout.split('\n'):
+            if "Listing ID:" in line:
+                listing_id_match = line.split("Listing ID:")[1].strip()
+            elif "Offer ID:" in line:
+                offer_id_match = line.split("Offer ID:")[1].strip()
+            elif "View your listing:" in line or "https://sandbox.ebay.com/itm/" in line:
+                # Extract URL from line
+                for word in line.split():
+                    if "https://" in word:
+                        ebay_url = word.strip()
+                        break
+        
+        if not listing_id_match or not ebay_url:
+            raise Exception("Could not extract listing ID or URL from script output")
+        
+        # Update listing with eBay info
+        listing.ebay_listing_id = listing_id_match
+        if offer_id_match:
+            listing.ebay_offer_id = offer_id_match
+        listing.ebay_sku = product_data["sku"]
+        listing.status = ListingStatus.PUBLISHED
+        listing.published_at = datetime.utcnow()
+        db.commit()
+        
+        print(f"✅ Successfully published to eBay: {listing_id_match}")
+        print(f"🔗 URL: {ebay_url}")
+        
+        return {
+            "success": True,
+            "listing_id": listing_id_match,
+            "offer_id": offer_id_match,
+            "ebay_url": ebay_url,
+            "message": "Successfully published to eBay Sandbox"
+        }
+        
+    except subprocess.TimeoutExpired:
+        listing.status = ListingStatus.ERROR
+        listing.error_message = "Publishing timed out after 2 minutes"
+        db.commit()
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Publishing timed out - eBay API might be slow or unresponsive"
+        )
+    except Exception as e:
+        print(f"❌ Error running ebay.py: {str(e)}")
+        listing.status = ListingStatus.ERROR
+        listing.error_message = f"Script Error: {str(e)}"
+        db.commit()
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to publish to eBay: {str(e)}"
+        )

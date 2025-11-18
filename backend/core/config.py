@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     ebay_client_id: str = ""
     ebay_client_secret: str = ""
     ebay_sandbox: str = "true"
+    ebay_token: str = ""  # eBay access token for ebay.py script
     
     # Backend URL
     backend_url: str = "http://localhost:8000"

@@ -1,341 +1,482 @@
+#!/usr/bin/env python3
 """
-eBay API Service
-Handles authentication and publishing items to eBay marketplace.
+eBay Sandbox Listing Creator
+Creates a complete eBay listing in sandbox environment with all required steps.
+
+Requirements:
+- EBAY_TOKEN in .env with proper scopes:
+  - sell.inventory
+  - sell.account
+  - sell.fulfillment
+  
+Usage:
+    python ebay.py
+    or
+    python ebay.py product_config.py
 """
 import os
+import sys
+import json
 import requests
-from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
+from dotenv import load_dotenv
 
-try:
-    from core.config import settings
-    EBAY_CLIENT_ID = settings.ebay_client_id
-    EBAY_CLIENT_SECRET = settings.ebay_client_secret
-    EBAY_SANDBOX = settings.ebay_sandbox.lower() == 'true'
-except ImportError:
-    # Fallback for standalone usage
-    EBAY_CLIENT_ID = os.getenv('EBAY_CLIENT_ID', '')
-    EBAY_CLIENT_SECRET = os.getenv('EBAY_CLIENT_SECRET', '')
-    EBAY_SANDBOX = os.getenv('EBAY_SANDBOX', 'true').lower() == 'true'
+load_dotenv()
+
+# ============================================================
+# CONFIG
+# ============================================================
+
+EBAY_TOKEN = os.getenv("EBAY_TOKEN")
+if not EBAY_TOKEN:
+    raise RuntimeError("EBAY_TOKEN missing in .env - Get token from: https://developer.ebay.com/my/auth/?env=sandbox")
+
+HEADERS_JSON = {
+    "Authorization": f"Bearer {EBAY_TOKEN}",
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    "Content-Language": "en-US",
+}
+
+ACCOUNT_BASE = "https://api.sandbox.ebay.com/sell/account/v1"
+INVENTORY_BASE = "https://api.sandbox.ebay.com/sell/inventory/v1"
+MEDIA_BASE = "https://apim.sandbox.ebay.com/commerce/media/v1_beta"
+MARKETPLACE_ID = "EBAY_US"
+
+# Load product data from config file if provided
+PRODUCT_DATA = None
+if len(sys.argv) > 1:
+    config_file = sys.argv[1]
+    print(f"Loading product data from {config_file}...")
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("product_config", config_file)
+    config_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(config_module)
+    PRODUCT_DATA = config_module.product_data
+else:
+    # Default product data for backward compatibility
+    PRODUCT_DATA = {
+        "sku": "POLO-TSHIRT-BLK-001",
+        "title": "Men's Classic Polo Shirt - Black Cotton Short Sleeve",
+        "description": "Premium quality men's polo shirt in classic black. Made from 100% cotton for comfort and breathability. Features traditional collar, short sleeves, and 3-button placket. Perfect for casual or business casual wear. Classic fit design.",
+        "price": "24.99",
+        "quantity": 30,
+        "category_id": "88433",
+        "image_urls": [
+            "https://tempfile.aiquickdraw.com/workers/nano/image_1763341194687_cv1jv0_1x1_1024x1024.png"
+        ],
+        "aspects": {
+            "Brand": ["Generic"],
+            "MPN": ["Does Not Apply"],
+            "Type": ["Polo Shirt"],
+            "Material": ["Cotton"],
+            "Size Type": ["Regular"],
+            "Sleeve Length": ["Short Sleeve"],
+            "Color": ["Black"],
+            "Features": ["Breathable"],
+            "Country of Origin": ["China"]
+        },
+        "brand": "Generic",
+        "mpn": "Does Not Apply",
+        "condition": "NEW"
+    }
+
+# Extract product details
+SKU = PRODUCT_DATA["sku"]
+PRODUCT_TITLE = PRODUCT_DATA["title"]
+PRODUCT_DESCRIPTION = PRODUCT_DATA["description"]
+PRODUCT_PRICE = PRODUCT_DATA["price"]
+PRODUCT_QUANTITY = PRODUCT_DATA["quantity"]
+CATEGORY_ID = PRODUCT_DATA["category_id"]
+IMAGE_URLS = PRODUCT_DATA["image_urls"]
+
+# Inventory location
+MERCHANT_LOCATION_KEY = "WAREHOUSE_US_1"
+LOCATION_ADDRESS = {
+    "addressLine1": "123 Main St",
+    "city": "San Jose",
+    "stateOrProvince": "CA",
+    "postalCode": "95125",
+    "country": "US",
+}
 
 
-class EbayService:
-    """Service for interacting with eBay APIs."""
+# ============================================================
+# HELPERS
+# ============================================================
+
+def pretty(label, resp):
+    """Pretty print API response"""
+    print(f"\n{'='*60}")
+    print(f"{label}")
+    print(f"{'='*60}")
+    print(f"Status: {resp.status_code}")
+    try:
+        data = resp.json()
+        print(json.dumps(data, indent=2))
+    except Exception:
+        print(resp.text)
+
+
+def upload_video_from_url(video_url):
+    """Upload video to eBay Media API and return video ID"""
+    import tempfile
     
-    def __init__(self):
-        """Initialize eBay service with credentials from environment."""
-        self.client_id = EBAY_CLIENT_ID
-        self.client_secret = EBAY_CLIENT_SECRET
-        self.sandbox_mode = EBAY_SANDBOX
-        
-        # API endpoints
-        if self.sandbox_mode:
-            self.auth_url = 'https://api.sandbox.ebay.com/identity/v1/oauth2/token'
-            self.inventory_base = 'https://api.sandbox.ebay.com/sell/inventory/v1'
+    print(f"📥 Downloading video from: {video_url}")
+    resp = requests.get(video_url, stream=True)
+    resp.raise_for_status()
+    
+    # Create temp file
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+    
+    # Download in chunks
+    for chunk in resp.iter_content(chunk_size=8192):
+        temp_file.write(chunk)
+    
+    temp_file.close()
+    file_size = os.path.getsize(temp_file.name)
+    print(f"✅ Downloaded {file_size:,} bytes")
+    
+    # Create video resource
+    print("📤 Creating video resource on eBay...")
+    url = f"{MEDIA_BASE}/video"
+    headers = {
+        "Authorization": f"Bearer {EBAY_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    
+    payload = {
+        "classification": ["ITEM"],
+        "title": "Product Video",
+        "description": "Product demonstration video",
+        "size": file_size
+    }
+    
+    resp = requests.post(url, headers=headers, json=payload)
+    
+    if resp.status_code not in [200, 201]:
+        print(f"❌ Error creating video resource: {resp.status_code}")
+        print(resp.text)
+        os.unlink(temp_file.name)
+        return None
+    
+    # Get video ID from Location header
+    location = resp.headers.get('Location', '')
+    video_id = location.split('/')[-1] if location else None
+    print(f"✅ Video resource created: {video_id}")
+    
+    # Upload video file
+    print("📤 Uploading video to eBay...")
+    upload_url = f"{MEDIA_BASE}/video/{video_id}/upload"
+    upload_headers = {
+        "Authorization": f"Bearer {EBAY_TOKEN}",
+        "Content-Type": "application/octet-stream",
+        "Content-Length": str(file_size),
+    }
+    
+    with open(temp_file.name, 'rb') as video_file:
+        resp = requests.post(upload_url, headers=upload_headers, data=video_file)
+    
+    # Cleanup temp file
+    os.unlink(temp_file.name)
+    
+    if resp.status_code not in [200, 204]:
+        print(f"❌ Error uploading video: {resp.status_code}")
+        print(resp.text)
+        return None
+    
+    print(f"✅ Video uploaded successfully: {video_id}")
+    return video_id
+
+
+# ============================================================
+# STEP 1: OPT INTO BUSINESS POLICIES
+# ============================================================
+
+def opt_in_policies():
+    """Opt into selling policy management (safe if already opted in)"""
+    url = f"{ACCOUNT_BASE}/program/opt_in"
+    payload = {"programType": "SELLING_POLICY_MANAGEMENT"}
+    resp = requests.post(url, headers=HEADERS_JSON, data=json.dumps(payload))
+    
+    if resp.status_code in (200, 201, 204):
+        print("✅ Opted into business policies")
+    elif resp.status_code == 409:
+        print("✅ Already opted into business policies")
+    else:
+        print("⚠️  Opt-in returned non-2xx (continuing anyway)")
+
+
+# ============================================================
+# STEP 2: GET OR CREATE FULFILLMENT POLICY
+# ============================================================
+
+def get_or_create_fulfillment_policy():
+    """Get existing fulfillment policy or create new one"""
+    # First, try to get existing policies
+    url = f"{ACCOUNT_BASE}/fulfillment_policy?marketplace_id={MARKETPLACE_ID}"
+    resp = requests.get(url, headers=HEADERS_JSON)
+    
+    if resp.status_code == 200:
+        data = resp.json()
+        policies = data.get("fulfillmentPolicies", [])
+        if policies:
+            policy_id = policies[0]["fulfillmentPolicyId"]
+            print(f"✅ Using existing fulfillment policy: {policy_id}")
+            return policy_id
+    
+    # Create new policy
+    import time
+    url = f"{ACCOUNT_BASE}/fulfillment_policy"
+    payload = {
+        "marketplaceId": MARKETPLACE_ID,
+        "name": f"Standard_Shipping_{int(time.time())}",
+        "shippingOptions": [
+            {
+                "optionType": "DOMESTIC",
+                "costType": "FLAT_RATE",
+                "shippingServices": [
+                    {
+                        "shippingServiceCode": "USPSPriority",
+                        "sortOrderId": 1,
+                        "shippingCost": {"currency": "USD", "value": "0.00"},
+                        "shippingCostType": "FLAT_RATE"
+                    }
+                ]
+            }
+        ],
+        "handlingTime": {"unit": "DAY", "value": 1}
+    }
+    resp = requests.post(url, headers=HEADERS_JSON, data=json.dumps(payload))
+    
+    # Handle already exists
+    if resp.status_code == 400:
+        data = resp.json()
+        for err in data.get("errors", []):
+            if err.get("errorId") == 20400:
+                for param in err.get("parameters", []):
+                    if param.get("name") == "DuplicateProfileId":
+                        existing_id = param.get("value")
+                        print(f"✅ Using existing fulfillment policy: {existing_id}")
+                        return existing_id
+    
+    if resp.status_code in (200, 201):
+        policy_id = resp.json()["fulfillmentPolicyId"]
+        print(f"✅ Created fulfillment policy: {policy_id}")
+        return policy_id
+    
+    pretty("Error creating fulfillment policy", resp)
+    resp.raise_for_status()
+
+
+# ============================================================
+# STEP 3: CREATE INVENTORY LOCATION
+# ============================================================
+
+def create_inventory_location():
+    """Create merchant inventory location"""
+    url = f"{INVENTORY_BASE}/location/{MERCHANT_LOCATION_KEY}"
+    payload = {
+        "location": {"address": LOCATION_ADDRESS},
+        "name": "Primary Warehouse",
+        "locationTypes": ["WAREHOUSE"],
+        "merchantLocationStatus": "ENABLED"
+    }
+    resp = requests.post(url, headers=HEADERS_JSON, data=json.dumps(payload))
+    
+    if resp.status_code in (200, 201, 204):
+        print("✅ Inventory location created")
+        return
+    
+    # Handle already exists
+    if resp.status_code == 400:
+        data = resp.json()
+        for err in data.get("errors", []):
+            if err.get("errorId") == 25803:  # Already exists
+                print("✅ Inventory location already exists")
+                return
+    
+    pretty("Error creating location", resp)
+    resp.raise_for_status()
+
+
+# ============================================================
+# STEP 4: CREATE INVENTORY ITEM
+# ============================================================
+
+def create_inventory_item():
+    """Create inventory item with product details"""
+    url = f"{INVENTORY_BASE}/inventory_item/{SKU}"
+    payload = {
+        "product": {
+            "title": PRODUCT_TITLE,
+            "description": PRODUCT_DESCRIPTION,
+            "aspects": PRODUCT_DATA["aspects"],
+            "brand": PRODUCT_DATA["brand"],
+            "mpn": PRODUCT_DATA["mpn"],
+            "imageUrls": IMAGE_URLS,
+        },
+        "availability": {
+            "shipToLocationAvailability": {
+                "quantity": PRODUCT_QUANTITY
+            }
+        },
+        "condition": PRODUCT_DATA["condition"]
+    }
+    
+    # Check if video URL is provided and upload it
+    video_url = PRODUCT_DATA.get("video_url")
+    if video_url:
+        print("\n📹 Video URL detected, uploading to eBay...")
+        video_id = upload_video_from_url(video_url)
+        if video_id:
+            payload["product"]["videoIds"] = [video_id]
+            print(f"✅ Video will be included in listing")
         else:
-            self.auth_url = 'https://api.ebay.com/identity/v1/oauth2/token'
-            self.inventory_base = 'https://api.ebay.com/sell/inventory/v1'
-        
-        self.access_token = None
-        self.token_expiry = None
+            print("⚠️  Video upload failed, continuing without video")
     
-    def get_access_token(self) -> Optional[str]:
-        """
-        Get OAuth2 access token for eBay API.
-        Uses client credentials grant type.
-        
-        Returns:
-            Access token string or None if failed
-        """
-        try:
-            # Check if we have a valid cached token
-            if self.access_token and self.token_expiry and datetime.now() < self.token_expiry:
-                return self.access_token
-            
-            headers = {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            }
-            data = {
-                'grant_type': 'client_credentials',
-                'scope': 'https://api.ebay.com/oauth/api_scope',
-            }
-            
-            response = requests.post(
-                self.auth_url,
-                headers=headers,
-                auth=(self.client_id, self.client_secret),
-                data=data,
-                timeout=30
-            )
-            response.raise_for_status()
-            
-            token_data = response.json()
-            self.access_token = token_data.get('access_token')
-            expires_in = token_data.get('expires_in', 7200)  # Default 2 hours
-            self.token_expiry = datetime.now() + timedelta(seconds=expires_in - 300)  # 5 min buffer
-            
-            print(f"✅ eBay access token obtained (expires in {expires_in}s)")
-            return self.access_token
-            
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Failed to get eBay access token: {e}")
-            return None
+    resp = requests.put(url, headers=HEADERS_JSON, data=json.dumps(payload))
     
-    def create_inventory_item(self, sku: str, product_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Create or update an inventory item in eBay.
-        
-        Args:
-            sku: Stock Keeping Unit (unique identifier)
-            product_data: Product details including title, description, price, etc.
-            
-        Returns:
-            API response dictionary
-        """
-        token = self.get_access_token()
-        if not token:
-            return {'errors': [{'message': 'Failed to authenticate with eBay'}]}
-        
-        try:
-            headers = {
-                'Authorization': f'Bearer {token}',
-                'Content-Type': 'application/json',
-                'Content-Language': 'en-US',
-            }
-            
-            # Format product data according to eBay Inventory API schema
-            inventory_item = {
-                "availability": {
-                    "shipToLocationAvailability": {
-                        "quantity": product_data.get('quantity', 1)
-                    }
-                },
-                "condition": product_data.get('condition', 'NEW'),
-                "product": {
-                    "title": product_data.get('title'),
-                    "description": product_data.get('description'),
-                    "aspects": product_data.get('aspects', {}),
-                    "imageUrls": product_data.get('image_urls', []),
-                    "videoIds": product_data.get('video_ids', [])
-                }
-            }
-            
-            response = requests.put(
-                f'{self.inventory_base}/inventory_item/{sku}',
-                headers=headers,
-                json=inventory_item,
-                timeout=30
-            )
-            
-            if response.status_code in [200, 201, 204]:
-                print(f"✅ Inventory item created: {sku}")
-                return {'success': True, 'sku': sku}
-            else:
-                error_data = response.json() if response.text else {}
-                print(f"⚠️ Error creating inventory item: {error_data}")
-                return error_data
-                
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Failed to create inventory item: {e}")
-            return {'errors': [{'message': str(e)}]}
-    
-    def create_offer(self, sku: str, offer_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Create an offer for an inventory item.
-        
-        Args:
-            sku: Stock Keeping Unit
-            offer_data: Offer details including price, marketplace, listing policies
-            
-        Returns:
-            API response with offer_id
-        """
-        token = self.get_access_token()
-        if not token:
-            return {'errors': [{'message': 'Failed to authenticate with eBay'}]}
-        
-        try:
-            headers = {
-                'Authorization': f'Bearer {token}',
-                'Content-Type': 'application/json',
-                'Content-Language': 'en-US',
-            }
-            
-            offer = {
-                "sku": sku,
-                "marketplaceId": offer_data.get('marketplace_id', 'EBAY_US'),
-                "format": offer_data.get('format', 'FIXED_PRICE'),
-                "availableQuantity": offer_data.get('quantity', 1),
-                "categoryId": offer_data.get('category_id'),
-                "listingDescription": offer_data.get('description'),
-                "listingPolicies": {
-                    "fulfillmentPolicyId": offer_data.get('fulfillment_policy_id'),
-                    "paymentPolicyId": offer_data.get('payment_policy_id'),
-                    "returnPolicyId": offer_data.get('return_policy_id')
-                },
-                "pricingSummary": {
-                    "price": {
-                        "currency": offer_data.get('currency', 'USD'),
-                        "value": str(offer_data.get('price'))
-                    }
-                }
-            }
-            
-            response = requests.post(
-                f'{self.inventory_base}/offer',
-                headers=headers,
-                json=offer,
-                timeout=30
-            )
-            response.raise_for_status()
-            
-            result = response.json()
-            offer_id = result.get('offerId')
-            print(f"✅ Offer created: {offer_id}")
-            return {'success': True, 'offer_id': offer_id}
-            
-        except requests.exceptions.RequestException as e:
-            error_data = e.response.json() if hasattr(e, 'response') and e.response.text else {}
-            print(f"❌ Failed to create offer: {error_data or str(e)}")
-            return {'errors': [error_data or {'message': str(e)}]}
-    
-    def publish_offer(self, offer_id: str) -> Dict[str, Any]:
-        """
-        Publish an offer to make it live on eBay.
-        
-        Args:
-            offer_id: The offer ID to publish
-            
-        Returns:
-            API response with listing_id and eBay URL
-        """
-        token = self.get_access_token()
-        if not token:
-            return {'errors': [{'message': 'Failed to authenticate with eBay'}]}
-        
-        try:
-            headers = {
-                'Authorization': f'Bearer {token}',
-                'Content-Type': 'application/json',
-                'Content-Language': 'en-US',
-            }
-            
-            response = requests.post(
-                f'{self.inventory_base}/offer/{offer_id}/publish',
-                headers=headers,
-                timeout=30
-            )
-            response.raise_for_status()
-            
-            result = response.json()
-            listing_id = result.get('listingId')
-            
-            # Construct eBay URL
-            if self.sandbox_mode:
-                ebay_url = f"https://www.sandbox.ebay.com/itm/{listing_id}"
-            else:
-                ebay_url = f"https://www.ebay.com/itm/{listing_id}"
-            
-            print(f"✅ Offer published: {listing_id}")
-            print(f"🔗 eBay URL: {ebay_url}")
-            
-            return {
-                'success': True,
-                'listing_id': listing_id,
-                'ebay_url': ebay_url,
-                'offer_id': offer_id
-            }
-            
-        except requests.exceptions.RequestException as e:
-            error_data = e.response.json() if hasattr(e, 'response') and e.response.text else {}
-            print(f"❌ Failed to publish offer: {error_data or str(e)}")
-            return {'errors': [error_data or {'message': str(e)}]}
-    
-    def publish_item_to_ebay(
-        self,
-        title: str,
-        description: str,
-        price: float,
-        quantity: int,
-        category_id: str,
-        image_urls: list,
-        condition: str = 'NEW',
-        sku: Optional[str] = None,
-        video_ids: Optional[list] = None,
-        fulfillment_policy_id: Optional[str] = None,
-        payment_policy_id: Optional[str] = None,
-        return_policy_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Complete workflow to publish an item on eBay.
-        
-        Args:
-            title: Product title
-            description: Product description
-            price: Product price in USD
-            quantity: Available quantity
-            category_id: eBay category ID
-            image_urls: List of image URLs
-            condition: Item condition (NEW, USED, etc.)
-            sku: Stock Keeping Unit (auto-generated if not provided)
-            video_ids: List of eBay video IDs
-            fulfillment_policy_id: Shipping policy ID
-            payment_policy_id: Payment policy ID
-            return_policy_id: Return policy ID
-            
-        Returns:
-            Dictionary with success status, listing_id, and ebay_url
-        """
-        try:
-            # Generate SKU if not provided
-            if not sku:
-                sku = f"SKU-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            
-            print(f"📦 Publishing item to eBay: {title}")
-            
-            # Step 1: Create inventory item
-            product_data = {
-                'title': title,
-                'description': description,
-                'quantity': quantity,
-                'condition': condition,
-                'image_urls': image_urls,
-                'video_ids': video_ids or []
-            }
-            
-            inventory_result = self.create_inventory_item(sku, product_data)
-            if inventory_result.get('errors'):
-                return inventory_result
-            
-            # Step 2: Create offer
-            offer_data = {
-                'marketplace_id': 'EBAY_US',
-                'category_id': category_id,
-                'description': description,
-                'price': price,
-                'quantity': quantity,
-                'currency': 'USD',
-                'format': 'FIXED_PRICE',
-                'fulfillment_policy_id': fulfillment_policy_id,
-                'payment_policy_id': payment_policy_id,
-                'return_policy_id': return_policy_id
-            }
-            
-            offer_result = self.create_offer(sku, offer_data)
-            if offer_result.get('errors'):
-                return offer_result
-            
-            offer_id = offer_result.get('offer_id')
-            
-            # Step 3: Publish offer
-            publish_result = self.publish_offer(offer_id)
-            
-            return publish_result
-            
-        except Exception as e:
-            print(f"❌ Error in publish workflow: {e}")
-            return {'errors': [{'message': str(e)}]}
+    if resp.status_code in (200, 201, 204):
+        print("✅ Inventory item created")
+    else:
+        pretty("Error creating inventory item", resp)
+        resp.raise_for_status()
 
 
-# Singleton instance
-ebay_service = EbayService()
+# ============================================================
+# STEP 5: CREATE OFFER
+# ============================================================
+
+def create_offer(fulfillment_policy_id):
+    """Create offer for the inventory item"""
+    url = f"{INVENTORY_BASE}/offer"
+    payload = {
+        "sku": SKU,
+        "marketplaceId": MARKETPLACE_ID,
+        "format": "FIXED_PRICE",
+        "listingDescription": PRODUCT_DESCRIPTION,
+        "availableQuantity": PRODUCT_QUANTITY,
+        "categoryId": CATEGORY_ID,
+        "pricingSummary": {
+            "price": {"currency": "USD", "value": PRODUCT_PRICE}
+        },
+        "listingDuration": "GTC",
+        "merchantLocationKey": MERCHANT_LOCATION_KEY,
+        "listingPolicies": {
+            "fulfillmentPolicyId": fulfillment_policy_id,
+        }
+    }
+    resp = requests.post(url, headers=HEADERS_JSON, data=json.dumps(payload))
+    
+    if resp.status_code in (200, 201):
+        offer_id = resp.json()["offerId"]
+        print(f"✅ Offer created: {offer_id}")
+        return offer_id
+    
+    # Handle already exists
+    if resp.status_code == 400:
+        data = resp.json()
+        for err in data.get("errors", []):
+            if err.get("errorId") == 25002:  # Offer already exists
+                for param in err.get("parameters", []):
+                    if param.get("name") == "offerId":
+                        existing_id = param.get("value")
+                        print(f"✅ Using existing offer: {existing_id}")
+                        return existing_id
+    
+    pretty("Error creating offer", resp)
+    resp.raise_for_status()
+
+
+# ============================================================
+# STEP 6: PUBLISH OFFER
+# ============================================================
+
+def publish_offer(offer_id):
+    """Publish the offer to create live listing"""
+    url = f"{INVENTORY_BASE}/offer/{offer_id}/publish"
+    resp = requests.post(url, headers=HEADERS_JSON)
+    
+    if resp.status_code == 200:
+        data = resp.json()
+        listing_id = data["listingId"]
+        print(f"✅ Listing published: {listing_id}")
+        
+        # Show warnings if any
+        if data.get("warnings"):
+            print("\n⚠️  Warnings:")
+            for warn in data["warnings"]:
+                print(f"   - {warn.get('message', 'Unknown warning')}")
+        
+        return listing_id
+    
+    pretty("Error publishing offer", resp)
+    resp.raise_for_status()
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def main():
+    print("\n" + "="*70)
+    print("eBay Sandbox Listing Creator")
+    print("="*70)
+    print(f"\nProduct: {PRODUCT_TITLE}")
+    print(f"SKU: {SKU}")
+    print(f"Price: ${PRODUCT_PRICE}")
+    print(f"Quantity: {PRODUCT_QUANTITY}")
+    print("\n" + "="*70)
+    
+    try:
+        # Step 1: Opt in
+        print("\n[1/6] Opting into business policies...")
+        opt_in_policies()
+        
+        # Step 2: Get/Create fulfillment policy
+        print("\n[2/6] Getting fulfillment policy...")
+        fulfillment_policy_id = get_or_create_fulfillment_policy()
+        
+        # Step 3: Create location
+        print("\n[3/6] Creating inventory location...")
+        create_inventory_location()
+        
+        # Step 4: Create inventory item
+        print("\n[4/6] Creating inventory item...")
+        create_inventory_item()
+        
+        # Step 5: Create offer
+        print("\n[5/6] Creating offer...")
+        offer_id = create_offer(fulfillment_policy_id)
+        
+        # Step 6: Publish
+        print("\n[6/6] Publishing listing...")
+        listing_id = publish_offer(offer_id)
+        
+        # Success!
+        print("\n" + "="*70)
+        print("✅ SUCCESS!")
+        print("="*70)
+        print(f"\nListing ID: {listing_id}")
+        print(f"Offer ID: {offer_id}")
+        print(f"\nView your listing:")
+        print(f"https://sandbox.ebay.com/itm/{listing_id}")
+        print("\n(Login with the same sandbox account used to generate the token)")
+        print("="*70 + "\n")
+        
+    except requests.exceptions.HTTPError as e:
+        print(f"\n❌ Error: {e}")
+        print("\nIf you're getting 403 errors, your token needs these scopes:")
+        print("  - sell.inventory")
+        print("  - sell.account")
+        print("  - sell.fulfillment")
+        print("\nGet a new token at:")
+        print("https://developer.ebay.com/my/auth/?env=sandbox&index=0")
+        exit(1)
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}")
+        exit(1)
+
+
+if __name__ == "__main__":
+    main()
