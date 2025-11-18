@@ -11,8 +11,11 @@ Requirements:
   
 Usage:
     python ebay.py
+    or
+    python ebay.py product_config.py
 """
 import os
+import sys
 import json
 import requests
 from dotenv import load_dotenv
@@ -36,20 +39,55 @@ HEADERS_JSON = {
 
 ACCOUNT_BASE = "https://api.sandbox.ebay.com/sell/account/v1"
 INVENTORY_BASE = "https://api.sandbox.ebay.com/sell/inventory/v1"
+MEDIA_BASE = "https://apim.sandbox.ebay.com/commerce/media/v1_beta"
 MARKETPLACE_ID = "EBAY_US"
 
-# Product Details
-SKU = "USB-C-CABLE-001"
-PRODUCT_TITLE = "USB-C to USB-C Cable - 1M Fast Charging Cable"
-PRODUCT_DESCRIPTION = "High quality USB-C cable. Supports fast charging and data transfer. 1 meter length, black color."
-PRODUCT_PRICE = "9.99"
-PRODUCT_QUANTITY = 10
-CATEGORY_ID = "162999"  # Cell Phone & Smartphone Parts
+# Load product data from config file if provided
+PRODUCT_DATA = None
+if len(sys.argv) > 1:
+    config_file = sys.argv[1]
+    print(f"Loading product data from {config_file}...")
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("product_config", config_file)
+    config_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(config_module)
+    PRODUCT_DATA = config_module.product_data
+else:
+    # Default product data for backward compatibility
+    PRODUCT_DATA = {
+        "sku": "POLO-TSHIRT-BLK-001",
+        "title": "Men's Classic Polo Shirt - Black Cotton Short Sleeve",
+        "description": "Premium quality men's polo shirt in classic black. Made from 100% cotton for comfort and breathability. Features traditional collar, short sleeves, and 3-button placket. Perfect for casual or business casual wear. Classic fit design.",
+        "price": "24.99",
+        "quantity": 30,
+        "category_id": "88433",
+        "image_urls": [
+            "https://tempfile.aiquickdraw.com/workers/nano/image_1763341194687_cv1jv0_1x1_1024x1024.png"
+        ],
+        "aspects": {
+            "Brand": ["Generic"],
+            "MPN": ["Does Not Apply"],
+            "Type": ["Polo Shirt"],
+            "Material": ["Cotton"],
+            "Size Type": ["Regular"],
+            "Sleeve Length": ["Short Sleeve"],
+            "Color": ["Black"],
+            "Features": ["Breathable"],
+            "Country of Origin": ["China"]
+        },
+        "brand": "Generic",
+        "mpn": "Does Not Apply",
+        "condition": "NEW"
+    }
 
-# Use public eBay image for testing (replace with your own GCS URLs)
-IMAGE_URLS = [
-    "https://tempfile.aiquickdraw.com/workers/nano/image_1763341194687_cv1jv0_1x1_1024x1024.png"
-]
+# Extract product details
+SKU = PRODUCT_DATA["sku"]
+PRODUCT_TITLE = PRODUCT_DATA["title"]
+PRODUCT_DESCRIPTION = PRODUCT_DATA["description"]
+PRODUCT_PRICE = PRODUCT_DATA["price"]
+PRODUCT_QUANTITY = PRODUCT_DATA["quantity"]
+CATEGORY_ID = PRODUCT_DATA["category_id"]
+IMAGE_URLS = PRODUCT_DATA["image_urls"]
 
 # Inventory location
 MERCHANT_LOCATION_KEY = "WAREHOUSE_US_1"
@@ -77,6 +115,77 @@ def pretty(label, resp):
         print(json.dumps(data, indent=2))
     except Exception:
         print(resp.text)
+
+
+def upload_video_from_url(video_url):
+    """Upload video to eBay Media API and return video ID"""
+    import tempfile
+    
+    print(f"📥 Downloading video from: {video_url}")
+    resp = requests.get(video_url, stream=True)
+    resp.raise_for_status()
+    
+    # Create temp file
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+    
+    # Download in chunks
+    for chunk in resp.iter_content(chunk_size=8192):
+        temp_file.write(chunk)
+    
+    temp_file.close()
+    file_size = os.path.getsize(temp_file.name)
+    print(f"✅ Downloaded {file_size:,} bytes")
+    
+    # Create video resource
+    print("📤 Creating video resource on eBay...")
+    url = f"{MEDIA_BASE}/video"
+    headers = {
+        "Authorization": f"Bearer {EBAY_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    
+    payload = {
+        "classification": ["ITEM"],
+        "title": "Product Video",
+        "description": "Product demonstration video",
+        "size": file_size
+    }
+    
+    resp = requests.post(url, headers=headers, json=payload)
+    
+    if resp.status_code not in [200, 201]:
+        print(f"❌ Error creating video resource: {resp.status_code}")
+        print(resp.text)
+        os.unlink(temp_file.name)
+        return None
+    
+    # Get video ID from Location header
+    location = resp.headers.get('Location', '')
+    video_id = location.split('/')[-1] if location else None
+    print(f"✅ Video resource created: {video_id}")
+    
+    # Upload video file
+    print("📤 Uploading video to eBay...")
+    upload_url = f"{MEDIA_BASE}/video/{video_id}/upload"
+    upload_headers = {
+        "Authorization": f"Bearer {EBAY_TOKEN}",
+        "Content-Type": "application/octet-stream",
+        "Content-Length": str(file_size),
+    }
+    
+    with open(temp_file.name, 'rb') as video_file:
+        resp = requests.post(upload_url, headers=upload_headers, data=video_file)
+    
+    # Cleanup temp file
+    os.unlink(temp_file.name)
+    
+    if resp.status_code not in [200, 204]:
+        print(f"❌ Error uploading video: {resp.status_code}")
+        print(resp.text)
+        return None
+    
+    print(f"✅ Video uploaded successfully: {video_id}")
+    return video_id
 
 
 # ============================================================
@@ -201,18 +310,9 @@ def create_inventory_item():
         "product": {
             "title": PRODUCT_TITLE,
             "description": PRODUCT_DESCRIPTION,
-            "aspects": {
-                "Brand": ["Generic"],
-                "MPN": ["Does Not Apply"],
-                "Type": ["Cable"],
-                "Connector A": ["USB-C"],
-                "Connector B": ["USB-C"],
-                "Cable Length": ["1 m"],
-                "Color": ["Black"],
-                "Material": ["Plastic", "Metal"]
-            },
-            "brand": "Generic",
-            "mpn": "Does Not Apply",
+            "aspects": PRODUCT_DATA["aspects"],
+            "brand": PRODUCT_DATA["brand"],
+            "mpn": PRODUCT_DATA["mpn"],
             "imageUrls": IMAGE_URLS,
         },
         "availability": {
@@ -220,8 +320,20 @@ def create_inventory_item():
                 "quantity": PRODUCT_QUANTITY
             }
         },
-        "condition": "NEW"
+        "condition": PRODUCT_DATA["condition"]
     }
+    
+    # Check if video URL is provided and upload it
+    video_url = PRODUCT_DATA.get("video_url")
+    if video_url:
+        print("\n📹 Video URL detected, uploading to eBay...")
+        video_id = upload_video_from_url(video_url)
+        if video_id:
+            payload["product"]["videoIds"] = [video_id]
+            print(f"✅ Video will be included in listing")
+        else:
+            print("⚠️  Video upload failed, continuing without video")
+    
     resp = requests.put(url, headers=HEADERS_JSON, data=json.dumps(payload))
     
     if resp.status_code in (200, 201, 204):
